@@ -9,7 +9,7 @@ import os
 import sys
 import plotly.graph_objects as go
 import streamlit.components.v1 as components
-from agent_api import query_agent
+from agent_api import query_agent, query_job_match_agent
 
 # ========== Page Configuration — MUST be first Streamlit command ==========
 st.set_page_config(
@@ -912,7 +912,9 @@ if result:
         st.markdown(result["raw_text"])
 
     else:
-        tab_profile, tab_roadmap = st.tabs(["👤 My Profile", "🗺️ My Roadmap"])
+        tab_profile, tab_roadmap, tab_jobs = st.tabs([
+            "👤 My Profile", "🗺️ My Roadmap", "🎯 Job Match"
+        ])
 
         # ══════════════════════════════════════════════════════════════════
         # TAB: MY PROFILE
@@ -1101,6 +1103,182 @@ if result:
                     unsafe_allow_html=True,
                 )
                 _render_skills_graph(skills_tree)
+        # ══════════════════════════════════════════════════════════════════
+        # TAB: JOB MATCH
+        # ══════════════════════════════════════════════════════════════════
+        with tab_jobs:
+            from agent_api import query_job_match_agent
+
+            st.markdown(
+                "<div class='info-box'><strong>🎯 Job Match Analysis:</strong> "
+                "See how your CV compares against target roles and get specific "
+                "tips to improve your application.</div>",
+                unsafe_allow_html=True,
+            )
+
+            # Read CV from session state — same upload as My Profile tab
+            cv_text_for_match = st.session_state.get("_cv_text")
+
+            if not cv_text_for_match:
+                # No CV yet — prompt the user to go upload one
+                st.markdown(
+                    "<div class='warning-box'>"
+                    "<strong>📄 No CV uploaded yet.</strong><br>"
+                    "Upload your CV using the file uploader above to enable "
+                    "job match analysis."
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.success(
+                    f"✅ Using uploaded CV "
+                    f"({len(cv_text_for_match):,} characters)"
+                )
+
+                job_match_key = f"jobmatch|{st.session_state.get('_cv_file_key', 'nocv')}"
+
+                run_job_match = st.button(
+                    "🔍 Analyse Job Match",
+                    key="job_match_btn",
+                )
+
+            if run_job_match:
+                st.session_state["_job_match_key"] = None  # force re-run
+
+            if run_job_match and cv_text:
+                with st.spinner("🔍 Matching your CV against target roles…"):
+                    try:
+                        jm = query_job_match_agent(
+                            user_query=final_query, cv_text=cv_text
+                        )
+                        st.session_state["_job_match"]     = jm
+                        st.session_state["_job_match_key"] = job_match_key
+                    except Exception as e:
+                        st.error(f"❌ Job match agent failed: {e}")
+                        with st.expander("Debug info"):
+                            st.exception(e)
+                        jm = None
+            else:
+                cached_jm = st.session_state.get("_job_match")
+                jm = (
+                    cached_jm
+                    if st.session_state.get("_job_match_key") == job_match_key
+                    else None
+                )
+
+            if jm:
+
+                # ── Match score hero ──────────────────────────────────────
+                match_pct = jm["match_level"]
+                top_flag  = jm["top_applicant"]
+
+                score_color = (
+                    "#4caf50" if match_pct >= 80
+                    else "#ff9800" if match_pct >= 55
+                    else "#f44336"
+                )
+                score_label = (
+                    "Strong match" if match_pct >= 80
+                    else "Partial match" if match_pct >= 55
+                    else "Developing match"
+                )
+
+                top_badge = (
+                    "<span style='background:#4caf50;color:white;padding:4px 14px;"
+                    "border-radius:20px;font-size:0.85rem;font-weight:600;"
+                    "margin-left:12px'>⭐ Top Applicant</span>"
+                    if top_flag else ""
+                )
+
+                st.markdown(
+                    f"<div style='background:white;border-radius:1.2rem;padding:1.8rem;"
+                    f"box-shadow:0 8px 32px rgba(0,0,0,0.08);margin:1rem 0;"
+                    f"border-left:6px solid {score_color};display:flex;"
+                    f"align-items:center;gap:1.5rem'>"
+                    f"<div style='font-size:3.5rem;font-weight:700;color:{score_color};line-height:1'>"
+                    f"{match_pct}%</div>"
+                    f"<div>"
+                    f"<div style='font-size:1.1rem;font-weight:600;color:#1e3c72'>{score_label}</div>"
+                    f"<div style='color:#666;font-size:0.9rem;margin-top:4px'>"
+                    f"Match against target role{top_badge}</div>"
+                    f"</div></div>",
+                    unsafe_allow_html=True,
+                )
+
+                # ── Two-column skill breakdown ─────────────────────────────
+                col_have, col_missing = st.columns(2)
+
+                with col_have:
+                    st.markdown(
+                        "<div class='gradient-card-blue'><h4>✅ Skills You Have</h4></div>",
+                        unsafe_allow_html=True,
+                    )
+                    for skill in jm["required_skills_achieved"]:
+                        st.markdown(
+                            f"<div style='background:#e8f5e9;border-radius:8px;"
+                            f"padding:0.5rem 0.9rem;margin:0.25rem 0;"
+                            f"border-left:3px solid #4caf50;"
+                            f"font-size:0.88rem;color:#1b5e20'>{skill}</div>",
+                            unsafe_allow_html=True,
+                        )
+
+                with col_missing:
+                    st.markdown(
+                        "<div class='gradient-card'><h4>⚠️ Skills to Develop</h4></div>",
+                        unsafe_allow_html=True,
+                    )
+                    for skill in jm["absent_required_skills"]:
+                        st.markdown(
+                            f"<div style='background:#fff8e1;border-radius:8px;"
+                            f"padding:0.5rem 0.9rem;margin:0.25rem 0;"
+                            f"border-left:3px solid #ff9800;"
+                            f"font-size:0.88rem;color:#e65100'>{skill}</div>",
+                            unsafe_allow_html=True,
+                        )
+
+                # ── Competitor skills ─────────────────────────────────────
+                if jm["additional_skills_others"]:
+                    st.markdown(
+                        "<div class='gradient-card-blue'>"
+                        "<h4>👥 Skills Other Applicants Have</h4></div>",
+                        unsafe_allow_html=True,
+                    )
+                    comp_cols = st.columns(2)
+                    for i, skill in enumerate(jm["additional_skills_others"]):
+                        with comp_cols[i % 2]:
+                            st.markdown(
+                                f"<div style='background:#f3e5f5;border-radius:8px;"
+                                f"padding:0.5rem 0.9rem;margin:0.25rem 0;"
+                                f"border-left:3px solid #9c27b0;"
+                                f"font-size:0.88rem;color:#4a148c'>{skill}</div>",
+                                unsafe_allow_html=True,
+                            )
+
+                # ── CV tips ───────────────────────────────────────────────
+                if jm["cv_tips"]:
+                    st.markdown(
+                        "<div class='gradient-card'><h4>✏️ CV Tips</h4></div>",
+                        unsafe_allow_html=True,
+                    )
+                    for i, tip in enumerate(jm["cv_tips"], 1):
+                        st.markdown(
+                            f"<div style='background:white;border-radius:8px;"
+                            f"padding:0.7rem 1rem;margin:0.4rem 0;"
+                            f"box-shadow:0 2px 8px rgba(0,0,0,0.06);"
+                            f"border-left:4px solid #667eea;font-size:0.88rem;color:#333'>"
+                            f"<span style='font-weight:600;color:#667eea'>{i}.</span> {tip}"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+
+                # Debug
+                with st.expander("🔧 Debug: raw job match output"):
+                    st.text_area("Raw response", jm.get("_raw", ""), height=150)
+                    if jm.get("_output_tokens"):
+                        st.caption(f"Output tokens: {jm['_output_tokens']}")
+
+            elif not cv_text:
+                st.info("Upload a CV above to enable job match analysis.")
 
     # Debug expander
     with st.expander("🔧 Debug: raw agent output"):
