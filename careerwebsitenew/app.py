@@ -9,7 +9,9 @@ import os
 import sys
 import plotly.graph_objects as go
 import streamlit.components.v1 as components
-from agent_api import query_agent, query_job_match_agent
+from agent_api import query_agent, query_job_match_agent, query_interview_agent, query_specific_job_agent, query_sector_match_agent
+import streamlit_mic_recorder 
+from tts_utils import text_to_speech_gtts
 
 # ========== Page Configuration — MUST be first Streamlit command ==========
 st.set_page_config(
@@ -86,20 +88,34 @@ def _get_platform():
     return platform
 
 
+# def load_platform_with_status():
+#     try:
+#         return _get_platform(), None
+#     except Exception as exc:
+#         return None, str(exc)
+
+# platform, err = load_platform_with_status()
+
+# if err or platform is None:
+#     st.error(
+#         f"**Backend initialisation failed.**\n\n{err}\n\n"
+#         "Check that all four Excel files exist in the `Data/` folder and that "
+#         "all Python dependencies are installed."
+#     )
+#     st.stop()
+
 def load_platform_with_status():
     try:
         return _get_platform(), None
     except Exception as exc:
-        return None, str(exc)
+        import traceback
+        return None, traceback.format_exc()  # ← FULL traceback
 
 platform, err = load_platform_with_status()
 
 if err or platform is None:
-    st.error(
-        f"**Backend initialisation failed.**\n\n{err}\n\n"
-        "Check that all four Excel files exist in the `Data/` folder and that "
-        "all Python dependencies are installed."
-    )
+    st.error("**Backend initialisation failed.**")
+    st.code(err, language="python")  # ← shows exact file AND line number
     st.stop()
 
 
@@ -720,6 +736,86 @@ setTimeout(() => {{
 """
     components.html(html, height=1000, scrolling=True)
 
+def generate_interview_pdf(conversation: list, career_goal: str, interview_type: str) -> bytes:
+    """
+    Generate a PDF transcript of the interview session.
+    Returns raw PDF bytes for st.download_button.
+    """
+    from fpdf import FPDF
+    import datetime
+
+    class InterviewPDF(FPDF):
+        def header(self):
+            self.set_font("Helvetica", "B", 14)
+            self.set_text_color(30, 60, 114)
+            self.cell(0, 10, "EEE Career Pathways — Interview Transcript", ln=True, align="C")
+            self.set_font("Helvetica", "", 10)
+            self.set_text_color(100, 100, 100)
+            self.cell(0, 6, f"Generated: {datetime.datetime.now().strftime('%d %B %Y, %H:%M')}", ln=True, align="C")
+            self.ln(4)
+            self.set_draw_color(102, 126, 234)
+            self.set_line_width(0.5)
+            self.line(10, self.get_y(), 200, self.get_y())
+            self.ln(4)
+
+        def footer(self):
+            self.set_y(-15)
+            self.set_font("Helvetica", "I", 8)
+            self.set_text_color(150, 150, 150)
+            self.cell(0, 10, f"Page {self.page_no()}", align="C")
+
+    pdf = InterviewPDF()
+    pdf.set_margins(15, 20, 15)
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=20)
+
+    # Session metadata
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(30, 60, 114)
+    pdf.cell(0, 8, "Session Details", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(60, 60, 60)
+    pdf.cell(40, 6, "Career Goal:", ln=False)
+    pdf.set_font("Helvetica", "I", 10)
+    pdf.cell(0, 6, career_goal or "Not specified", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(40, 6, "Interview Type:", ln=False)
+    pdf.set_font("Helvetica", "I", 10)
+    pdf.cell(0, 6, interview_type or "Not specified", ln=True)
+    pdf.ln(4)
+
+    # Conversation
+    pdf.set_draw_color(200, 200, 200)
+    pdf.set_line_width(0.3)
+    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+    pdf.ln(4)
+
+    for msg in conversation:
+        is_agent = msg["role"] == "assistant"
+
+        # Speaker label
+        if is_agent:
+            pdf.set_fill_color(240, 242, 250)
+            pdf.set_text_color(30, 60, 114)
+            label = "Interviewer (AI)"
+        else:
+            pdf.set_fill_color(232, 245, 233)
+            pdf.set_text_color(27, 94, 32)
+            label = "Student"
+
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.cell(0, 6, label, ln=True, fill=False)
+
+        # Message body
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(50, 50, 50)
+
+        # Handle long text with multi_cell — encode safely
+        content = msg["content"].encode("latin-1", errors="replace").decode("latin-1")
+        pdf.multi_cell(0, 5.5, content, border=0)
+        pdf.ln(3)
+
+    return bytes(pdf.output())
 # ========== Tabs ==========
 # tab_profile, tab_roadmap = st.tabs(["👤 My Profile", "🗺️ My Roadmap"])
 
@@ -797,7 +893,7 @@ setTimeout(() => {{
 # # ==================== TAB 2: CV Analysis ====================
 # ==================== TAB 2: AI CV Analysis ====================
 # ==================== TAB 2: AI CV Analysis ====================
-from agent_api import query_agent  # lazy import keeps startup fast
+from agent_api import query_agent, query_job_match_agent, query_interview_agent  # lazy import keeps startup fast
 
 st.markdown(
     "<h2 class='section-header'>📄 CV Analysis & AI Career Advisor</h2>",
@@ -912,8 +1008,8 @@ if result:
         st.markdown(result["raw_text"])
 
     else:
-        tab_profile, tab_roadmap, tab_jobs = st.tabs([
-            "👤 My Profile", "🗺️ My Roadmap", "🎯 Job Match"
+        tab_profile, tab_roadmap, tab_jobs, tab_interview = st.tabs([
+            "👤 My Profile", "🗺️ My Roadmap", "🎯 Job Match", "🎤 Interview Prep"
         ])
 
         # ══════════════════════════════════════════════════════════════════
@@ -1107,71 +1203,122 @@ if result:
         # TAB: JOB MATCH
         # ══════════════════════════════════════════════════════════════════
         with tab_jobs:
-            from agent_api import query_job_match_agent
-
             st.markdown(
                 "<div class='info-box'><strong>🎯 Job Match Analysis:</strong> "
-                "See how your CV compares against target roles and get specific "
-                "tips to improve your application.</div>",
+                "See which sectors suit you best, how your CV compares to the "
+                "general market, and optionally match against a specific posting.</div>",
                 unsafe_allow_html=True,
             )
 
-            # Read CV from session state — same upload as My Profile tab
             cv_text_for_match = st.session_state.get("_cv_text")
+            run_job_match = False
 
             if not cv_text_for_match:
-                # No CV yet — prompt the user to go upload one
                 st.markdown(
-                    "<div class='warning-box'>"
-                    "<strong>📄 No CV uploaded yet.</strong><br>"
-                    "Upload your CV using the file uploader above to enable "
-                    "job match analysis."
+                    "<div class='warning-box'><strong>📄 No CV uploaded yet.</strong><br>"
+                    "Upload your CV using the file uploader above to enable job match analysis."
                     "</div>",
                     unsafe_allow_html=True,
                 )
             else:
-                st.success(
-                    f"✅ Using uploaded CV "
-                    f"({len(cv_text_for_match):,} characters)"
+                st.success(f"✅ Using uploaded CV ({len(cv_text_for_match):,} characters)")
+
+                st.markdown("#### 📋 Specific Job Description (optional)")
+                st.markdown(
+                    "<small style='color:#666'>Paste a job posting you are targeting "
+                    "for a tailored match score alongside the general analysis.</small>",
+                    unsafe_allow_html=True,
+                )
+                specific_job_input = st.text_area(
+                    "Job description:",
+                    placeholder="Paste the full job description here including "
+                                "responsibilities, required skills, and qualifications…",
+                    height=180,
+                    key="specific_job_input",
+                    label_visibility="collapsed",
                 )
 
-                job_match_key = f"jobmatch|{st.session_state.get('_cv_file_key', 'nocv')}"
-
-                run_job_match = st.button(
-                    "🔍 Analyse Job Match",
-                    key="job_match_btn",
+                job_match_key = (
+                    f"jobmatch|{st.session_state.get('_cv_file_key', 'nocv')}"
+                    f"|{hash(specific_job_input)}"
                 )
+                run_job_match = st.button("🔍 Analyse Job Match", key="job_match_btn")
 
             if run_job_match:
-                st.session_state["_job_match_key"] = None  # force re-run
+                st.session_state["_job_match_key"]          = None
+                st.session_state["_specific_job_match_key"] = None
+                st.session_state["_sector_match_key"]       = None
 
-            if run_job_match and cv_text:
-                with st.spinner("🔍 Matching your CV against target roles…"):
+            if run_job_match and cv_text_for_match:
+                parsed_str = str(result) if result else None
+
+                # ── Specific job agent (if description provided) ──────────
+                specific_jm = None
+                if specific_job_input.strip():
+                    with st.spinner("🔍 Analysing match against specific job posting…"):
+                        try:
+                            specific_jm = query_specific_job_agent(
+                                cv_text=cv_text_for_match,
+                                job_description=specific_job_input.strip(),
+                                parsed=parsed_str,
+                            )
+                            st.session_state["_specific_jm"]            = specific_jm
+                            st.session_state["_specific_job_match_key"] = job_match_key
+                        except Exception as e:
+                            st.error(f"❌ Specific job match failed: {e}")
+                            with st.expander("Debug"):
+                                st.exception(e)
+
+                # ── Sector agent ──────────────────────────────────────────
+                sector_result = None
+                with st.spinner("🏭 Identifying best-fit sectors…"):
+                    try:
+                        sector_result = query_sector_match_agent(
+                            cv_text=cv_text_for_match,
+                            parsed=parsed_str,
+                        )
+                        st.session_state["_sector_result"]    = sector_result
+                        st.session_state["_sector_match_key"] = job_match_key
+                    except Exception as e:
+                        st.error(f"❌ Sector match failed: {e}")
+                        with st.expander("Debug"):
+                            st.exception(e)
+
+                # ── General job match agent ───────────────────────────────
+                jm = None
+                with st.spinner("🔍 Analysing general market match…"):
                     try:
                         jm = query_job_match_agent(
-                            user_query=final_query, cv_text=cv_text
+                            user_query=final_query,
+                            cv_text=cv_text_for_match,
+                            parsed=parsed_str,
                         )
                         st.session_state["_job_match"]     = jm
                         st.session_state["_job_match_key"] = job_match_key
                     except Exception as e:
-                        st.error(f"❌ Job match agent failed: {e}")
-                        with st.expander("Debug info"):
+                        st.error(f"❌ General job match failed: {e}")
+                        with st.expander("Debug"):
                             st.exception(e)
-                        jm = None
+
             else:
-                cached_jm = st.session_state.get("_job_match")
-                jm = (
-                    cached_jm
-                    if st.session_state.get("_job_match_key") == job_match_key
-                    else None
-                )
+                # Restore from cache
+                def _from_cache(result_key, cache_key):
+                    cached = st.session_state.get(result_key)
+                    return (
+                        cached
+                        if cv_text_for_match
+                        and st.session_state.get(cache_key) == job_match_key
+                        else None
+                    )
 
-            if jm:
+                jm          = _from_cache("_job_match",    "_job_match_key")
+                specific_jm = _from_cache("_specific_jm",  "_specific_job_match_key")
+                sector_result = _from_cache("_sector_result", "_sector_match_key")
 
-                # ── Match score hero ──────────────────────────────────────
-                match_pct = jm["match_level"]
-                top_flag  = jm["top_applicant"]
-
+            # ── Render helper (shared by specific + general blocks) ───────
+            def render_match_block(m: dict, heading: str) -> None:
+                match_pct   = m["match_level"]
+                top_flag    = m["top_applicant"]
                 score_color = (
                     "#4caf50" if match_pct >= 80
                     else "#ff9800" if match_pct >= 55
@@ -1182,7 +1329,6 @@ if result:
                     else "Partial match" if match_pct >= 55
                     else "Developing match"
                 )
-
                 top_badge = (
                     "<span style='background:#4caf50;color:white;padding:4px 14px;"
                     "border-radius:20px;font-size:0.85rem;font-weight:600;"
@@ -1190,30 +1336,30 @@ if result:
                     if top_flag else ""
                 )
 
+                st.markdown(f"### {heading}")
                 st.markdown(
                     f"<div style='background:white;border-radius:1.2rem;padding:1.8rem;"
                     f"box-shadow:0 8px 32px rgba(0,0,0,0.08);margin:1rem 0;"
                     f"border-left:6px solid {score_color};display:flex;"
                     f"align-items:center;gap:1.5rem'>"
-                    f"<div style='font-size:3.5rem;font-weight:700;color:{score_color};line-height:1'>"
-                    f"{match_pct}%</div>"
+                    f"<div style='font-size:3.5rem;font-weight:700;"
+                    f"color:{score_color};line-height:1'>{match_pct}%</div>"
                     f"<div>"
-                    f"<div style='font-size:1.1rem;font-weight:600;color:#1e3c72'>{score_label}</div>"
+                    f"<div style='font-size:1.1rem;font-weight:600;color:#1e3c72'>"
+                    f"{score_label}</div>"
                     f"<div style='color:#666;font-size:0.9rem;margin-top:4px'>"
-                    f"Match against target role{top_badge}</div>"
+                    f"{heading}{top_badge}</div>"
                     f"</div></div>",
                     unsafe_allow_html=True,
                 )
 
-                # ── Two-column skill breakdown ─────────────────────────────
                 col_have, col_missing = st.columns(2)
-
                 with col_have:
                     st.markdown(
                         "<div class='gradient-card-blue'><h4>✅ Skills You Have</h4></div>",
                         unsafe_allow_html=True,
                     )
-                    for skill in jm["required_skills_achieved"]:
+                    for skill in m["required_skills_achieved"]:
                         st.markdown(
                             f"<div style='background:#e8f5e9;border-radius:8px;"
                             f"padding:0.5rem 0.9rem;margin:0.25rem 0;"
@@ -1221,13 +1367,12 @@ if result:
                             f"font-size:0.88rem;color:#1b5e20'>{skill}</div>",
                             unsafe_allow_html=True,
                         )
-
                 with col_missing:
                     st.markdown(
                         "<div class='gradient-card'><h4>⚠️ Skills to Develop</h4></div>",
                         unsafe_allow_html=True,
                     )
-                    for skill in jm["absent_required_skills"]:
+                    for skill in m["absent_required_skills"]:
                         st.markdown(
                             f"<div style='background:#fff8e1;border-radius:8px;"
                             f"padding:0.5rem 0.9rem;margin:0.25rem 0;"
@@ -1236,15 +1381,14 @@ if result:
                             unsafe_allow_html=True,
                         )
 
-                # ── Competitor skills ─────────────────────────────────────
-                if jm["additional_skills_others"]:
+                if m["additional_skills_others"]:
                     st.markdown(
                         "<div class='gradient-card-blue'>"
                         "<h4>👥 Skills Other Applicants Have</h4></div>",
                         unsafe_allow_html=True,
                     )
                     comp_cols = st.columns(2)
-                    for i, skill in enumerate(jm["additional_skills_others"]):
+                    for i, skill in enumerate(m["additional_skills_others"]):
                         with comp_cols[i % 2]:
                             st.markdown(
                                 f"<div style='background:#f3e5f5;border-radius:8px;"
@@ -1254,32 +1398,598 @@ if result:
                                 unsafe_allow_html=True,
                             )
 
-                # ── CV tips ───────────────────────────────────────────────
-                if jm["cv_tips"]:
+                if m["cv_tips"]:
                     st.markdown(
                         "<div class='gradient-card'><h4>✏️ CV Tips</h4></div>",
                         unsafe_allow_html=True,
                     )
-                    for i, tip in enumerate(jm["cv_tips"], 1):
+                    for i, tip in enumerate(m["cv_tips"], 1):
                         st.markdown(
                             f"<div style='background:white;border-radius:8px;"
                             f"padding:0.7rem 1rem;margin:0.4rem 0;"
                             f"box-shadow:0 2px 8px rgba(0,0,0,0.06);"
-                            f"border-left:4px solid #667eea;font-size:0.88rem;color:#333'>"
+                            f"border-left:4px solid #667eea;"
+                            f"font-size:0.88rem;color:#333'>"
                             f"<span style='font-weight:600;color:#667eea'>{i}.</span> {tip}"
                             f"</div>",
                             unsafe_allow_html=True,
                         )
 
-                # Debug
-                with st.expander("🔧 Debug: raw job match output"):
-                    st.text_area("Raw response", jm.get("_raw", ""), height=150)
-                    if jm.get("_output_tokens"):
-                        st.caption(f"Output tokens: {jm['_output_tokens']}")
+                with st.expander("🔧 Debug: raw output"):
+                    st.text_area("Raw", m.get("_raw", ""), height=120, key=f"debug_{heading[:8]}")
+                    if m.get("_output_tokens"):
+                        st.caption(f"Output tokens: {m['_output_tokens']}")
 
-            elif not cv_text:
-                st.info("Upload a CV above to enable job match analysis.")
+            # ── 1. Sector match (always shown first if available) ─────────
+            if sector_result and sector_result.get("sectors"):
+                st.markdown("### 🏭 Best-Fit Sectors")
 
+                degree_colors = {
+                    "High":   ("#4caf50", "#e8f5e9", "#1b5e20"),
+                    "Medium": ("#ff9800", "#fff8e1", "#e65100"),
+                    "Low":    ("#9e9e9e", "#f5f5f5", "#424242"),
+                }
+                degree_order = {"High": 0, "Medium": 1, "Low": 2}
+                sectors_sorted = sorted(
+                    sector_result["sectors"],
+                    key=lambda x: degree_order.get(x.get("Degree", "Low"), 3),
+                )
+
+                # Display as a responsive grid of cards
+                n = len(sectors_sorted)
+                cols_per_row = min(n, 3)
+                rows = [
+                    sectors_sorted[i : i + cols_per_row]
+                    for i in range(0, n, cols_per_row)
+                ]
+                for row in rows:
+                    row_cols = st.columns(len(row))
+                    for col, sector in zip(row_cols, row):
+                        area   = sector.get("Area", "")
+                        degree = sector.get("Degree", "")
+                        border, bg, text = degree_colors.get(
+                            degree, ("#9e9e9e", "#f5f5f5", "#424242")
+                        )
+                        with col:
+                            st.markdown(
+                                f"<div style='background:{bg};border-radius:1rem;"
+                                f"padding:1.2rem 1rem;text-align:center;"
+                                f"border-top:4px solid {border};margin:0.3rem 0'>"
+                                f"<div style='font-size:1rem;font-weight:600;"
+                                f"color:{text};margin-bottom:0.4rem'>{area}</div>"
+                                f"<span style='background:{border};color:white;"
+                                f"padding:3px 12px;border-radius:12px;"
+                                f"font-size:0.78rem;font-weight:600'>{degree} match</span>"
+                                f"</div>",
+                                unsafe_allow_html=True,
+                            )
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+            # ── 2. Specific job match (if description was provided) ───────
+            if specific_jm:
+                st.markdown("<hr>", unsafe_allow_html=True)
+                render_match_block(specific_jm, "🎯 Specific Job Match")
+
+            # ── 3. General market match ───────────────────────────────────
+            if jm:
+                if specific_jm:
+                    st.markdown("<hr>", unsafe_allow_html=True)
+                render_match_block(jm, "🌐 General Market Match")
+
+            if not jm and not specific_jm and not sector_result and cv_text_for_match:
+                st.info("Click 'Analyse Job Match' to see your results.")
+                # ══════════════════════════════════════════════════════════════════
+        # TAB: INTERVIEW PREP
+        # ══════════════════════════════════════════════════════════════════
+        with tab_interview:
+            from streamlit_mic_recorder import speech_to_text
+            from tts_utils import text_to_speech_gtts
+
+            st.markdown(
+                "<h2 class='section-header'>🎤 Interview Prep</h2>",
+                unsafe_allow_html=True,
+            )
+
+            # ── Privacy notices ───────────────────────────────────────────
+            st.markdown(
+                "<div class='info-box'>"
+                "<strong>📷 Camera notice:</strong> Your camera feed is displayed "
+                "locally in your browser only. No frames are captured, transmitted, "
+                "or recorded at any point."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                "<div class='warning-box'>"
+                "<strong>🎙️ Audio notice:</strong> Speech is transcribed to text "
+                "in your browser via the Web Speech API. The transcript is then "
+                "processed by Azure AI Foundry agents in the same way as your CV "
+                "and career aspirations. No raw audio is stored or transmitted."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+
+            # ── Initialise session state ──────────────────────────────────
+            for _k, _v in {
+                "interview_started":  False,
+                "interview_history":  [],
+                "interview_type":     "",
+                "interview_goal":     "",
+                "tts_enabled":        True,
+                "last_audio":         None,
+            }.items():
+                if _k not in st.session_state:
+                    st.session_state[_k] = _v
+
+            # ══════════════════════════════════════════════════════════════
+            # PRE-SESSION SETUP
+            # ══════════════════════════════════════════════════════════════
+            if not st.session_state["interview_started"]:
+
+                st.markdown("### ⚙️ Session Setup")
+
+                iv_type_col, iv_tts_col = st.columns([2, 1])
+
+                with iv_type_col:
+                    iv_type = st.selectbox(
+                        "Interview type:",
+                        [
+                            "Behavioural Interview",
+                            "Technical Interview",
+                            "CV Deep Dive",
+                        ],
+                        key="iv_type",
+                    )
+
+                with iv_tts_col:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    tts_toggle = st.toggle(
+                        "🔊 Agent voice (TTS)",
+                        value=True,
+                        key="iv_tts_toggle",
+                        help="When enabled, the interviewer's replies are read aloud using Azure Neural TTS.",
+                    )
+                    st.session_state["tts_enabled"] = tts_toggle
+
+                # Career goal carried over from the main analysis
+                iv_final_goal = final_query
+                if iv_final_goal:
+                    st.markdown(
+                        f"<div class='info-box'>🎯 <strong>Career goal for this session:</strong> "
+                        f"{iv_final_goal}</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        "<div class='warning-box'>⚠️ No career goal detected. "
+                        "Please enter your goal in the Career Goal section above "
+                        "before starting the interview.</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                cv_available = bool(st.session_state.get("_cv_text"))
+                if not cv_available:
+                    st.markdown(
+                        "<div class='warning-box'>📄 No CV uploaded — upload your CV "
+                        "above for a personalised CV Deep Dive or tailored questions."
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                # ── Camera preview ────────────────────────────────────────
+                st.markdown("### 📷 Camera Preview")
+                components.html("""
+<style>
+  #cam-wrap { position: relative; width: 100%; max-width: 1440px; }
+  #cam {
+    width: 100%; border-radius: 12px;
+    background: #1a1a2e; display: none;
+  }
+  #cam-status {
+    position: absolute; bottom: 10px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.55); color: white;
+    font-size: 11px; padding: 3px 10px; border-radius: 20px;
+    pointer-events: none; display: none;
+  }
+  #cam-toggle {
+    padding: 7px 18px; border-radius: 20px; border: none;
+    background: #667eea; color: white; font-size: 0.85rem;
+    font-weight: 600; cursor: pointer; margin-bottom: 8px;
+    transition: background 0.2s;
+  }
+  #cam-toggle.on { background: #f44336; }
+  #cam-error { color: #999; font-size: 0.85rem; padding: 0.5rem 0; }
+</style>
+<button id="cam-toggle" onclick="toggleCam()">📷 Enable Camera</button>
+<div id="cam-wrap">
+  <video id="cam" autoplay playsinline muted></video>
+  <div id="cam-status">🔴 Live — not recorded</div>
+</div>
+<p id="cam-error"></p>
+<script>
+  let camStream = null;
+  async function toggleCam() {
+    const btn    = document.getElementById("cam-toggle");
+    const vid    = document.getElementById("cam");
+    const status = document.getElementById("cam-status");
+    const err    = document.getElementById("cam-error");
+    if (camStream) {
+      camStream.getTracks().forEach(t => t.stop());
+      camStream = null;
+      vid.srcObject = null;
+      vid.style.display = "none";
+      status.style.display = "none";
+      btn.textContent = "📷 Enable Camera";
+      btn.classList.remove("on");
+      return;
+    }
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia(
+        { video: true, audio: false }
+      );
+      vid.srcObject = camStream;
+      vid.style.display = "block";
+      status.style.display = "block";
+      btn.textContent = "📷 Disable Camera";
+      btn.classList.add("on");
+      err.textContent = "";
+    } catch(e) {
+      err.textContent = "Camera unavailable: " + e.message;
+    }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && camStream) {
+      camStream.getTracks().forEach(t => t.stop());
+      camStream = null;
+      const vid = document.getElementById("cam");
+      const btn = document.getElementById("cam-toggle");
+      const status = document.getElementById("cam-status");
+      if (vid)    { vid.srcObject = null; vid.style.display = "none"; }
+      if (status) { status.style.display = "none"; }
+      if (btn)    { btn.textContent = "📷 Enable Camera"; btn.classList.remove("on"); }
+    }
+  });
+</script>
+""", height=810)
+
+                # ── Begin session button ──────────────────────────────────
+                st.markdown("### 🚀 Start Session")
+                st.markdown(
+                    "Click **Begin Session** when you are ready. "
+                    "The AI interviewer will introduce itself and then begin "
+                    "asking questions. Respond by **speaking** (click the mic button) "
+                    "or **typing** in the chat box."
+                )
+
+                if st.button(
+                    "▶ Begin Session",
+                    disabled=not bool(iv_final_goal),
+                    key="iv_begin",
+                ):
+                    st.session_state["interview_started"] = True
+                    st.session_state["interview_type"]    = iv_type
+                    st.session_state["interview_goal"]    = iv_final_goal
+                    st.session_state["interview_history"] = []
+                    st.session_state["last_audio"]        = None
+
+                    # Opening message to agent
+                    opening = (
+                        f"My career goal is: {iv_final_goal}. "
+                        f"I would like to do a {iv_type}."
+                    )
+                    if cv_available:
+                        opening += " I have uploaded my CV for your reference."
+
+                    st.session_state["interview_history"].append(
+                        {"role": "user", "content": opening}
+                    )
+
+                    with st.spinner("Starting session…"):
+                        try:
+                            r = query_interview_agent(
+                                conversation=st.session_state["interview_history"],
+                                cv_text=st.session_state.get("_cv_text"),
+                                career_goal=iv_final_goal,
+                            )
+                            reply = r["reply"]
+                            st.session_state["interview_history"].append(
+                                {"role": "assistant", "content": reply}
+                            )
+                            # Generate opening TTS if enabled
+                            if st.session_state["tts_enabled"]:
+                                try:
+                                    st.session_state["last_audio"] = text_to_speech_gtts(reply)
+                                    audio_bytes = st.session_state["last_audio"]
+                                    st.audio(audio_bytes, format = "audio/mp3",autoplay = True)
+                                except Exception as tts_err:
+                                    st.warning(f"TTS unavailable: {tts_err}")
+                        except Exception as e:
+                            st.error(f"❌ Could not start session: {e}")
+                            st.session_state["interview_started"] = False
+                    st.rerun()
+
+            # ══════════════════════════════════════════════════════════════
+            # ACTIVE INTERVIEW SESSION
+            # ══════════════════════════════════════════════════════════════
+            else:
+                from streamlit_mic_recorder import speech_to_text
+                from tts_utils import text_to_speech_gtts
+
+                goal_disp = st.session_state["interview_goal"]
+                type_disp = st.session_state["interview_type"]
+
+                # ── Session metadata strip ────────────────────────────────
+                col_meta1, col_meta2, col_meta3, col_meta4 = st.columns(4)
+                with col_meta1:
+                    st.markdown(
+                        f"<div class='metric-container'>"
+                        f"<div class='metric-value'>🎯</div>"
+                        f"<div class='metric-label'>"
+                        f"{goal_disp[:28]}{'…' if len(goal_disp) > 28 else ''}"
+                        f"</div></div>",
+                        unsafe_allow_html=True,
+                    )
+                with col_meta2:
+                    st.markdown(
+                        f"<div class='metric-container'>"
+                        f"<div class='metric-value'>📋</div>"
+                        f"<div class='metric-label'>{type_disp}</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                with col_meta3:
+                    q_count = sum(
+                        1 for m in st.session_state["interview_history"]
+                        if m["role"] == "user"
+                    )
+                    st.markdown(
+                        f"<div class='metric-container'>"
+                        f"<div class='metric-value'>{q_count}</div>"
+                        f"<div class='metric-label'>Responses given</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                with col_meta4:
+                    tts_status = "🔊 On" if st.session_state["tts_enabled"] else "🔇 Off"
+                    st.markdown(
+                        f"<div class='metric-container'>"
+                        f"<div class='metric-value'>{tts_status}</div>"
+                        f"<div class='metric-label'>Agent voice</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # ── TTS playback for latest agent reply ───────────────────
+                if st.session_state.get("last_audio"):
+                    st.audio(
+                        st.session_state["last_audio"],
+                        format="audio/wav",
+                        autoplay=True,
+                    )
+
+                # ── Camera toggle (compact, in-session) ───────────────────
+                components.html("""
+<style>
+  #cam-section { display:flex; align-items:flex-start; gap:12px; margin:8px 0; }
+  #cam { width:1440px; border-radius:10px; background:#1a1a2e; display:none; }
+  #cam-controls { display:flex; flex-direction:column; gap:6px; }
+  #cam-toggle {
+    padding:6px 16px; border-radius:16px; border:none;
+    background:#667eea; color:white; font-size:0.82rem;
+    font-weight:600; cursor:pointer;
+  }
+  #cam-toggle.on { background:#f44336; }
+  #cam-status { font-size:0.75rem; color:#999; }
+</style>
+<div id="cam-section">
+  <video id="cam" autoplay playsinline muted></video>
+  <div id="cam-controls">
+    <button id="cam-toggle" onclick="toggleCam()">📷 Enable Camera</button>
+    <div id="cam-status">Camera off — not recorded</div>
+  </div>
+</div>
+<script>
+  let stream = null;
+  async function toggleCam() {
+    const btn    = document.getElementById("cam-toggle");
+    const vid    = document.getElementById("cam");
+    const status = document.getElementById("cam-status");
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop()); stream = null;
+      vid.srcObject = null; vid.style.display = "none";
+      btn.textContent = "📷 Enable Camera"; btn.classList.remove("on");
+      status.textContent = "Camera off";
+      return;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+      vid.srcObject = stream; vid.style.display = "block";
+      btn.textContent = "📷 Disable Camera"; btn.classList.add("on");
+      status.textContent = "🔴 Live — not recorded";
+    } catch(e) { status.textContent = "Camera unavailable: " + e.message; }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && stream) {
+      stream.getTracks().forEach(t => t.stop()); stream = null;
+      const vid = document.getElementById("cam");
+      const btn = document.getElementById("cam-toggle");
+      if (vid) { vid.srcObject = null; vid.style.display = "none"; }
+      if (btn) { btn.textContent = "📷 Enable Camera"; btn.classList.remove("on"); }
+    }
+  });
+</script>
+""", height=810)
+                # ── Input: Speech-to-Text ─────────────────────────────────
+                st.markdown("#### 🎙️ Your Response")
+                st.markdown(
+                    "<small style='color:#666'>Click the microphone to speak, "
+                    "or type your answer in the box below. "
+                    "Both inputs are treated identically.</small>",
+                    unsafe_allow_html=True,
+                )
+
+                # STT via streamlit-mic-recorder
+                voice_transcript = speech_to_text(
+                    language="en",
+                    start_prompt="🎙️ Click to speak",
+                    stop_prompt="⏹ Stop recording",
+                    just_once=True,
+                    use_container_width=False,
+                    key="iv_stt",
+                )
+
+                # Text fallback
+                typed_response = st.chat_input(
+                    "Or type your answer here…",
+                    key="iv_chat_input",
+                )
+
+                # Determine which input to use (voice takes priority)
+                user_input = None
+                if voice_transcript and voice_transcript.strip():
+                    user_input = voice_transcript.strip()
+                    st.markdown(
+                        f"<div class='success-box'>"
+                        f"🎙️ <strong>Transcribed:</strong> {user_input}"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                elif typed_response and typed_response.strip():
+                    user_input = typed_response.strip()
+
+                # ── Process user input → agent → TTS ─────────────────────
+                if user_input:
+                    st.session_state["interview_history"].append(
+                        {"role": "user", "content": user_input}
+                    )
+                    st.session_state["last_audio"] = None  # clear old audio
+
+                    with st.spinner("🤖 Interviewer is thinking…"):
+                        try:
+                            r = query_interview_agent(
+                                conversation=st.session_state["interview_history"],
+                                cv_text=st.session_state.get("_cv_text"),
+                                career_goal=st.session_state["interview_goal"],
+                            )
+                            reply = r["reply"]
+                            st.session_state["interview_history"].append(
+                                {"role": "assistant", "content": reply}
+                            )
+
+                            # TTS — convert reply to audio
+                            if st.session_state["tts_enabled"]:
+                                with st.spinner("🔊 Generating audio…"):
+                                    try:
+                                        st.session_state["last_audio"] = (
+                                            text_to_speech_gtts(reply)
+                                        )
+                                    except Exception as tts_err:
+                                        st.warning(
+                                            f"⚠️ TTS failed (text response still shown): "
+                                            f"{tts_err}"
+                                        )
+
+                        except Exception as e:
+                            st.error(f"❌ Agent error: {e}")
+                            with st.expander("Debug"):
+                                st.exception(e)
+
+                    st.rerun()
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # ── Conversation history ───────────────────────────────────
+
+                st.markdown("#### 💬 Interview Conversation")
+
+                # Filter out the silent opening context message
+                display_history = [
+                    m for m in st.session_state["interview_history"]
+                    if not (
+                        m["role"] == "user"
+                        and m["content"].startswith("My career goal is:")
+                    )
+                ]
+
+                if not display_history:
+                    st.info("The conversation will appear here as you speak or type.")
+
+                for msg in display_history:
+                    is_agent = msg["role"] == "assistant"
+                    label    = "🤖 Interviewer" if is_agent else "🎓 You"
+                    bg       = "#f0f2fa" if is_agent else "#e8f5e9"
+                    border   = "#667eea" if is_agent else "#4caf50"
+                    st.markdown(
+                        f"<div style='background:{bg};border-left:4px solid {border};"
+                        f"border-radius:0 8px 8px 0;padding:0.8rem 1rem;margin:0.4rem 0'>"
+                        f"<strong style='font-size:0.8rem;color:#666'>{label}</strong><br>"
+                        f"<span style='font-size:0.9rem;color:#333;"
+                        f"white-space:pre-wrap'>{msg['content']}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # ── TTS toggle mid-session ────────────────────────────────
+                with st.expander("⚙️ Session settings"):
+                    new_tts = st.toggle(
+                        "🔊 Agent voice (TTS)",
+                        value=st.session_state["tts_enabled"],
+                        key="iv_tts_mid",
+                        help="Toggle agent voice on or off mid-session.",
+                    )
+                    if new_tts != st.session_state["tts_enabled"]:
+                        st.session_state["tts_enabled"] = new_tts
+                        st.rerun()
+
+                # ── Actions row ───────────────────────────────────────────
+                st.markdown("---")
+                act_col1, act_col2 = st.columns(2)
+
+                with act_col1:
+                    # PDF transcript download
+                    if len(display_history) > 0:
+                        try:
+                            pdf_bytes = generate_interview_pdf(
+                                conversation=display_history,
+                                career_goal=st.session_state["interview_goal"],
+                                interview_type=st.session_state["interview_type"],
+                            )
+                            st.download_button(
+                                label="📄 Download Transcript (PDF)",
+                                data=pdf_bytes,
+                                file_name="interview_transcript.pdf",
+                                mime="application/pdf",
+                                use_container_width=True,
+                            )
+                        except Exception as e:
+                            st.warning(f"PDF generation unavailable: {e}")
+                    else:
+                        st.button(
+                            "📄 Download Transcript (PDF)",
+                            disabled=True,
+                            use_container_width=True,
+                            help="Complete at least one exchange to download the transcript.",
+                        )
+
+                with act_col2:
+                    if st.button(
+                        "🔄 Start New Session",
+                        key="iv_reset",
+                        use_container_width=True,
+                    ):
+                        for k in [
+                            "interview_started", "interview_history",
+                            "interview_type", "interview_goal",
+                            "last_audio",
+                        ]:
+                            st.session_state.pop(k, None)
+                        st.rerun()
     # Debug expander
     with st.expander("🔧 Debug: raw agent output"):
         st.text_area("Raw response", result.get("_raw", ""), height=200)
