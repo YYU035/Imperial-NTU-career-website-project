@@ -569,7 +569,7 @@ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 let rec,active=false;
 if(!SR){document.getElementById('st').textContent='⚠️ Not supported — use Chrome';document.getElementById('btn').disabled=true;}
 else{
-  rec=new SR();rec.lang='en-SG';rec.continuous=false;rec.interimResults=true;
+  rec=new SR();rec.lang='en-SG';rec.continuous=true;rec.interimResults=true;
   rec.onstart=()=>{active=true;document.getElementById('btn').className='on';
     document.getElementById('btn').textContent='🔴 Listening… click to stop';
     document.getElementById('st').textContent='Speak now…';
@@ -1069,7 +1069,7 @@ with tab3:
         ba, bb = st.columns(2)
         with ba:
             if st.button("📨 Submit Answer", type="primary", width='stretch',
-                         disabled=st.session_state.iv_busy or not answer.strip()):
+                         disabled=st.session_state.iv_busy):
                 st.session_state.iv_busy = True
                 st.session_state.iv_history.append({"role": "student", "text": answer.strip()})
                 with st.spinner("Interviewer is responding…"):
