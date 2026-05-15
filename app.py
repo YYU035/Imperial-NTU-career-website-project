@@ -24,7 +24,7 @@ st.set_page_config(
     page_title="EEE Career Pathways",
     page_icon="🎓",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # ========== Premium CSS ==========
@@ -39,29 +39,14 @@ footer {visibility: hidden;}
 .stRadio label, .stSelectbox label, .stFileUploader label,
 .stCheckbox label, .stTextArea label { color: #1a1a2e !important; }
 
-/* Header always above everything — max possible z-index */
+/* Header always above everything */
 header[data-testid="stHeader"] {
     z-index: 2147483647 !important;
     position: fixed !important;
 }
 
-/* Sidebar stays behind the header */
-section[data-testid="stSidebar"] {
-    z-index: 1 !important;
-}
-
-/* Dark green toggle arrow — always visible even when sidebar is open */
-[data-testid="collapsedControl"] {
-    display: flex !important;
-    visibility: visible !important;
-    background: #1a6b3c !important;
-    border-radius: 0 6px 6px 0 !important;
-    box-shadow: 2px 0 8px rgba(0,0,0,0.25) !important;
-}
-[data-testid="collapsedControl"] svg {
-    fill: white !important;
-    color: white !important;
-}
+/* Hide the native Streamlit sidebar arrow — we use our own buttons */
+[data-testid="collapsedControl"] { display: none !important; }
 
 /* File uploader button text white */
 [data-testid="stFileUploaderDropzone"] button,
@@ -70,6 +55,13 @@ section[data-testid="stSidebar"] {
 
 /* sidebar chat */
 section[data-testid="stSidebar"] { background: #f8f9ff; }
+/* Close Panel button — red tint */
+section[data-testid="stSidebar"] button[key="close_sidebar_btn"],
+section[data-testid="stSidebar"] div:has(button[key="close_sidebar_btn"]) button {
+    background: rgba(220,53,69,0.08) !important;
+    border: 1.5px solid rgba(220,53,69,0.4) !important;
+    color: #c0392b !important;
+}
 section[data-testid="stSidebar"] .stChatInput { border-top: 1px solid #e0e0e0; padding-top: 6px; }
 section[data-testid="stSidebar"] .stButton button { border-radius: 8px !important; font-size: 0.78rem !important; }
 section[data-testid="stSidebar"] .stChatInput textarea { font-size: 0.88rem; }
@@ -128,17 +120,38 @@ section[data-testid="stSidebar"] button[kind="secondary"]:hover {
 </style>
 """, unsafe_allow_html=True)
 
+# ========== Sidebar visibility (CSS-only, no JS needed) ==========
+if "sidebar_visible" not in st.session_state:
+    st.session_state["sidebar_visible"] = False
+
+if st.session_state["sidebar_visible"]:
+    st.markdown("""<style>
+    section[data-testid="stSidebar"] {
+        display: flex !important; visibility: visible !important;
+        transform: none !important; min-width: 244px !important;
+    }
+    </style>""", unsafe_allow_html=True)
+else:
+    st.markdown("""<style>
+    section[data-testid="stSidebar"] { display: none !important; }
+    </style>""", unsafe_allow_html=True)
+
 # ========== Header ==========
 st.markdown("""
 <div class='main-header'>
     <h1>🎓 EEE Career Pathways Platform</h1>
     <p>Career Guidance for Electrical & Electronic Engineering Students</p>
-    <div style="margin-top:14px;background:rgba(255,255,255,0.15);border-radius:10px;padding:10px 16px;display:inline-flex;align-items:center;gap:10px;cursor:pointer;">
+    <div style="margin-top:14px;background:rgba(255,255,255,0.15);border-radius:10px;padding:10px 16px;display:inline-flex;align-items:center;gap:10px;">
       <span style="font-size:22px;">🤖</span>
-      <span style="color:white;font-size:0.9rem;"><strong>AI Career Advisor</strong> — Ask about salaries, skills, career paths & more <span style="opacity:0.75;font-size:0.8rem;">← chat panel on the left</span></span>
+      <span style="color:white;font-size:0.9rem;"><strong>AI Career Advisor</strong> — Ask about salaries, skills, career paths & more</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+if not st.session_state["sidebar_visible"]:
+    if st.button("💬 Open AI Chat Advisor", key="open_chat_btn"):
+        st.session_state["sidebar_visible"] = True
+        st.rerun()
 
 # ========== Backend Loading ==========
 @st.cache_resource(show_spinner=False)
@@ -672,25 +685,9 @@ with st.sidebar:
         st.session_state["_chat_job"] = None
         st.rerun()
 
-    st.html("""
-    <button onclick="(function(){
-      var sels=[
-        '[data-testid=collapsedControl] button',
-        '[data-testid=collapsedControl]',
-        'button[aria-label*=sidebar i]',
-        'button[aria-label*=close i]'
-      ];
-      for(var i=0;i<sels.length;i++){
-        var el=document.querySelector(sels[i]);
-        if(el){el.click();return;}
-      }
-    })()"
-      style="width:100%;background:rgba(220,53,69,0.08);border:1.5px solid rgba(220,53,69,0.35);
-             border-radius:8px;padding:7px 0;cursor:pointer;font-size:13px;
-             color:#c0392b;font-family:sans-serif;font-weight:500;margin-top:4px;">
-      ✕ Close Panel
-    </button>
-    """)
+    if st.button("✕ Close Panel", key="close_sidebar_btn", use_container_width=True):
+        st.session_state["sidebar_visible"] = False
+        st.rerun()
 
 
 # ========== Tabs ==========
