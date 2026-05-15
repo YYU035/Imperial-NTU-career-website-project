@@ -148,11 +148,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-if not st.session_state["sidebar_visible"]:
-    if st.button("💬 Open AI Chat Advisor", key="open_chat_btn"):
-        st.session_state["sidebar_visible"] = True
-        st.rerun()
-
 # ========== Backend Loading ==========
 @st.cache_resource(show_spinner=False)
 def _get_platform():
@@ -691,7 +686,7 @@ with st.sidebar:
 
 
 # ========== Tabs ==========
-tab1, tab2, tab3, tab5 = st.tabs(["🔍 Explore Jobs", "📄 CV Analysis", "🎤 Mock Interview", "📊 Analytics"])
+tab1, tab2, tab3, tab5, tab_chat = st.tabs(["🔍 Explore Jobs", "📄 CV Analysis", "🎤 Mock Interview", "📊 Analytics", "💬 AI Chat"])
 
 # ==================== TAB 1: Explore Jobs ====================
 with tab1:
@@ -1300,6 +1295,22 @@ with tab5:
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         )
         st.plotly_chart(fig_heat, width='stretch', config={"displayModeBar": False})
+
+# ==================== TAB: AI Chat ====================
+with tab_chat:
+    st.markdown("<h2 class='section-header'>💬 AI Career Advisor</h2>", unsafe_allow_html=True)
+    if st.session_state["sidebar_visible"]:
+        st.markdown("<div class='success-box'>✅ Chat panel is open on the left — ask anything!</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='glass-card' style='text-align:center;padding:2.5rem;'>", unsafe_allow_html=True)
+        st.markdown("### 🤖 Your AI Career Advisor is ready")
+        st.markdown("Get personalised advice on EEE careers, salaries, skills, internships, NTU courses and more.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        col_l, col_m, col_r = st.columns([1, 2, 1])
+        with col_m:
+            if st.button("💬 Open Chat Panel", type="primary", use_container_width=True, key="open_chat_from_tab"):
+                st.session_state["sidebar_visible"] = True
+                st.rerun()
 
 # Footer
 st.markdown("""<div class='footer'><h3>🎓 EEE Career Pathways Platform</h3><p>NTU Singapore • 2026</p></div>""", unsafe_allow_html=True)
