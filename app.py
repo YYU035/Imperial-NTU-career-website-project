@@ -39,26 +39,19 @@ footer {visibility: hidden;}
 .stRadio label, .stSelectbox label, .stFileUploader label,
 .stCheckbox label, .stTextArea label { color: #1a1a2e !important; }
 
-/* Ensure Streamlit's top header always renders above the sidebar */
+/* Header always above everything — max possible z-index */
 header[data-testid="stHeader"] {
-    z-index: 999990 !important;
-}
-
-/* Push the entire sidebar below Streamlit's top toolbar so it never covers it */
-section[data-testid="stSidebar"] {
-    top: 3.75rem !important;
-    height: calc(100vh - 3.75rem) !important;
-    z-index: 100 !important;
-}
-
-/* Pin the sidebar toggle arrow so sidebar content can never cover it */
-[data-testid="collapsedControl"] {
+    z-index: 2147483647 !important;
     position: fixed !important;
-    top: 4rem !important;
-    left: 0 !important;
-    z-index: 999999 !important;
-    display: flex !important;
-    visibility: visible !important;
+}
+
+/* Sidebar stays behind the header */
+section[data-testid="stSidebar"] {
+    z-index: 1 !important;
+}
+
+/* Dark green toggle arrow, always visible */
+[data-testid="collapsedControl"] {
     background: #1a6b3c !important;
     border-radius: 0 6px 6px 0 !important;
     box-shadow: 2px 0 8px rgba(0,0,0,0.25) !important;
