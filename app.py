@@ -1302,10 +1302,11 @@ with tab_chat:
     if st.session_state["sidebar_visible"]:
         st.markdown("<div class='success-box'>✅ Chat panel is open on the left — ask anything!</div>", unsafe_allow_html=True)
     else:
-        st.markdown("<div class='glass-card' style='text-align:center;padding:2.5rem;'>", unsafe_allow_html=True)
-        st.markdown("### 🤖 Your AI Career Advisor is ready")
-        st.markdown("Get personalised advice on EEE careers, salaries, skills, internships, NTU courses and more.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class='glass-card' style='text-align:center;padding:2.5rem;'>
+            <h3>🤖 Your AI Career Advisor is ready</h3>
+            <p>Get personalised advice on EEE careers, salaries, skills, internships, NTU courses and more.</p>
+        </div>""", unsafe_allow_html=True)
         col_l, col_m, col_r = st.columns([1, 2, 1])
         with col_m:
             if st.button("💬 Open Chat Panel", type="primary", use_container_width=True, key="open_chat_from_tab"):
