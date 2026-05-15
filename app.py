@@ -598,6 +598,16 @@ with st.sidebar:
     }
     </style>
     """, unsafe_allow_html=True)
+
+    # Close button — JS clicks the native Streamlit collapse control
+    components.html("""
+    <button onclick="window.parent.document.querySelector('[data-testid=\\"collapsedControl\\"]').click()"
+        style="float:right;background:none;border:1px solid #ccc;border-radius:6px;
+               padding:2px 10px;cursor:pointer;font-size:14px;color:#555;margin-bottom:4px;">
+        ✕ Close
+    </button>
+    """, height=36)
+
     st.markdown("**🤖 EEE Career Advisor**")
 
     is_busy = st.session_state.get("_chat_busy", False)
