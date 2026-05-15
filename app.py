@@ -50,8 +50,14 @@ header[data-testid="stHeader"] {
 
 /* File uploader button text white */
 [data-testid="stFileUploaderDropzone"] button,
+[data-testid="stFileUploaderDropzone"] button span,
+[data-testid="stFileUploaderDropzone"] button p,
 [data-testid="stFileUploadDropzone"] button,
-.stFileUploader button { color: white !important; }
+[data-testid="stFileUploadDropzone"] button span,
+.stFileUploader button, .stFileUploader button span, .stFileUploader button p {
+    color: white !important;
+    background-color: #3a3a5c !important;
+}
 
 /* sidebar chat */
 section[data-testid="stSidebar"] { background: #f8f9ff; }
