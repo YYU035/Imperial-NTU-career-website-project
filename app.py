@@ -65,8 +65,19 @@ section[data-testid="stSidebar"] {
 }
 
 /* sidebar chat */
+section[data-testid="stSidebar"] { background: #f8f9ff; }
 section[data-testid="stSidebar"] .stChatInput { border-top: 1px solid #e0e0e0; padding-top: 6px; }
 section[data-testid="stSidebar"] .stButton button { border-radius: 8px !important; font-size: 0.78rem !important; }
+section[data-testid="stSidebar"] .stChatInput textarea { font-size: 0.88rem; }
+section[data-testid="stSidebar"] button[kind="secondary"] {
+    border-radius: 20px !important; font-size: 0.78rem !important;
+    padding: 4px 10px !important; border: 1.5px solid #dde !important;
+    background: white !important; color: #444 !important;
+    transition: all 0.15s !important;
+}
+section[data-testid="stSidebar"] button[kind="secondary"]:hover {
+    background: #667eea !important; color: white !important; border-color: #667eea !important;
+}
 
 .main-header {
     background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
@@ -630,22 +641,6 @@ if "chat_history" not in st.session_state:
     ]
 
 with st.sidebar:
-    st.markdown("""
-    <style>
-    section[data-testid="stSidebar"] { background: #f8f9ff; }
-    section[data-testid="stSidebar"] .stChatInput textarea { font-size: 0.88rem; }
-    section[data-testid="stSidebar"] button[kind="secondary"] {
-        border-radius: 20px !important; font-size: 0.78rem !important;
-        padding: 4px 10px !important; border: 1.5px solid #dde !important;
-        background: white !important; color: #444 !important;
-        transition: all 0.15s !important;
-    }
-    section[data-testid="stSidebar"] button[kind="secondary"]:hover {
-        background: #667eea !important; color: white !important; border-color: #667eea !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
     st.markdown("**🤖 EEE Career Advisor**")
 
     is_busy = st.session_state.get("_chat_busy", False)
@@ -703,13 +698,20 @@ with st.sidebar:
 
     components.html("""
     <div style="padding:4px 0 8px 0;">
-      <button onclick="(function(){try{
-        window.parent.document.querySelector('[data-testid=collapsedControl]').click();
-      }catch(e){}})()"
+      <button onclick="(function(){
+        var p=window.parent, el;
+        var sels=['[data-testid=collapsedControl] button',
+                  '[data-testid=collapsedControl]',
+                  'button[aria-label=\\'Close sidebar\\']',
+                  'button[aria-label=\\'collapse sidebar\\']'];
+        for(var i=0;i<sels.length;i++){
+          el=p.document.querySelector(sels[i]);
+          if(el){el.click();break;}
+        }
+      })()"
         style="width:100%;background:rgba(220,53,69,0.08);border:1.5px solid rgba(220,53,69,0.35);
                border-radius:8px;padding:7px 0;cursor:pointer;font-size:13px;
-               color:#c0392b;font-family:sans-serif;font-weight:500;
-               transition:background 0.15s;">
+               color:#c0392b;font-family:sans-serif;font-weight:500;">
         ✕ Close Panel
       </button>
     </div>
