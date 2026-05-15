@@ -41,9 +41,12 @@ section[data-testid="stSidebar"] > div:first-child { padding-top: 1rem; }
 .stRadio label, .stSelectbox label, .stFileUploader label,
 .stCheckbox label, .stTextArea label { color: #1a1a2e !important; }
 
+/* Always show sidebar toggle button */
+[data-testid="collapsedControl"] { display: flex !important; visibility: visible !important; }
+
 /* sidebar chat */
 section[data-testid="stSidebar"] .stChatInput { border-top: 1px solid #e0e0e0; padding-top: 6px; }
-section[data-testid="stSidebar"] button[kind="secondary"] { border-radius: 8px !important; font-size: 0.78rem !important; }
+section[data-testid="stSidebar"] .stButton button { border-radius: 8px !important; font-size: 0.78rem !important; }
 
 .main-header {
     background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
