@@ -33,16 +33,20 @@ st.markdown("""
 .stApp { background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); }
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-section[data-testid="stSidebar"] > div:first-child { padding-top: 1rem; }
-
 /* Global text colour fix — ensures dark text on light backgrounds */
 .main .block-container, [data-testid="stMarkdownContainer"],
 [data-testid="stText"], [data-testid="stCaptionContainer"],
 .stRadio label, .stSelectbox label, .stFileUploader label,
 .stCheckbox label, .stTextArea label { color: #1a1a2e !important; }
 
-/* Always show sidebar toggle button */
-[data-testid="collapsedControl"] { display: flex !important; visibility: visible !important; }
+/* Sidebar toggle — force visible in all states, float above sidebar content */
+[data-testid="collapsedControl"] {
+    display: flex !important; visibility: visible !important; opacity: 1 !important;
+    z-index: 999999 !important; position: fixed !important;
+}
+
+/* sidebar content padding so it doesn't sit under the toggle button */
+section[data-testid="stSidebar"] > div:first-child { padding-top: 2.5rem; }
 
 /* sidebar chat */
 section[data-testid="stSidebar"] .stChatInput { border-top: 1px solid #e0e0e0; padding-top: 6px; }
