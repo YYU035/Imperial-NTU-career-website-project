@@ -50,8 +50,10 @@ section[data-testid="stSidebar"] {
     z-index: 1 !important;
 }
 
-/* Dark green toggle arrow, always visible */
+/* Dark green toggle arrow — always visible even when sidebar is open */
 [data-testid="collapsedControl"] {
+    display: flex !important;
+    visibility: visible !important;
     background: #1a6b3c !important;
     border-radius: 0 6px 6px 0 !important;
     box-shadow: 2px 0 8px rgba(0,0,0,0.25) !important;
@@ -60,6 +62,11 @@ section[data-testid="stSidebar"] {
     fill: white !important;
     color: white !important;
 }
+
+/* File uploader button text white */
+[data-testid="stFileUploaderDropzone"] button,
+[data-testid="stFileUploadDropzone"] button,
+.stFileUploader button { color: white !important; }
 
 /* sidebar chat */
 section[data-testid="stSidebar"] { background: #f8f9ff; }
