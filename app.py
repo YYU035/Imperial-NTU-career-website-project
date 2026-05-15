@@ -39,8 +39,11 @@ footer {visibility: hidden;}
 .stRadio label, .stSelectbox label, .stFileUploader label,
 .stCheckbox label, .stTextArea label { color: #1a1a2e !important; }
 
-/* Sidebar — push content below the native header bar so close button is never covered */
-section[data-testid="stSidebar"] > div:first-child { margin-top: 2rem !important; }
+/* Push the entire sidebar below Streamlit's top toolbar so it never covers it */
+section[data-testid="stSidebar"] {
+    top: 3.75rem !important;
+    height: calc(100vh - 3.75rem) !important;
+}
 
 /* sidebar chat */
 section[data-testid="stSidebar"] .stChatInput { border-top: 1px solid #e0e0e0; padding-top: 6px; }
@@ -595,7 +598,6 @@ with st.sidebar:
     }
     </style>
     """, unsafe_allow_html=True)
-    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
     st.markdown("**🤖 EEE Career Advisor**")
 
     is_busy = st.session_state.get("_chat_busy", False)
