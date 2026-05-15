@@ -39,10 +39,16 @@ footer {visibility: hidden;}
 .stRadio label, .stSelectbox label, .stFileUploader label,
 .stCheckbox label, .stTextArea label { color: #1a1a2e !important; }
 
+/* Ensure Streamlit's top header always renders above the sidebar */
+header[data-testid="stHeader"] {
+    z-index: 999990 !important;
+}
+
 /* Push the entire sidebar below Streamlit's top toolbar so it never covers it */
 section[data-testid="stSidebar"] {
     top: 3.75rem !important;
     height: calc(100vh - 3.75rem) !important;
+    z-index: 100 !important;
 }
 
 /* Pin the sidebar toggle arrow so sidebar content can never cover it */
@@ -106,6 +112,34 @@ section[data-testid="stSidebar"] .stButton button { border-radius: 8px !importan
 .footer { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 2rem; border-radius: 2rem 2rem 0 0; margin-top: 3rem; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
+
+# Force sidebar collapsed on every fresh page load (new session = _sidebar_init absent)
+if "_sidebar_init" not in st.session_state:
+    st.session_state["_sidebar_init"] = True
+    components.html("""
+    <script>
+    (function() {
+        var attempts = 0;
+        function tryCollapse() {
+            attempts++;
+            if (attempts > 15) return;
+            try {
+                var p = window.parent;
+                var sidebar = p.document.querySelector('section[data-testid="stSidebar"]');
+                if (!sidebar) { setTimeout(tryCollapse, 200); return; }
+                var rect = sidebar.getBoundingClientRect();
+                // rect.width > 50 and rect.left > -50 means sidebar is visibly open
+                if (rect.width > 50 && rect.left > -50) {
+                    var btn = p.document.querySelector('[data-testid="collapsedControl"]');
+                    if (btn) { btn.click(); return; }
+                }
+            } catch(e) {}
+            setTimeout(tryCollapse, 200);
+        }
+        setTimeout(tryCollapse, 300);
+    })();
+    </script>
+    """, height=0)
 
 # ========== Header ==========
 st.markdown("""
