@@ -39,15 +39,6 @@ footer {visibility: hidden;}
 .stRadio label, .stSelectbox label, .stFileUploader label,
 .stCheckbox label, .stTextArea label { color: #1a1a2e !important; }
 
-/* Sidebar toggle — force visible in all states, float above sidebar content */
-[data-testid="collapsedControl"] {
-    display: flex !important; visibility: visible !important; opacity: 1 !important;
-    z-index: 999999 !important; position: fixed !important;
-}
-
-/* sidebar content padding so it doesn't sit under the toggle button */
-section[data-testid="stSidebar"] > div:first-child { padding-top: 2.5rem; }
-
 /* sidebar chat */
 section[data-testid="stSidebar"] .stChatInput { border-top: 1px solid #e0e0e0; padding-top: 6px; }
 section[data-testid="stSidebar"] .stButton button { border-radius: 8px !important; font-size: 0.78rem !important; }
@@ -600,23 +591,15 @@ with st.sidebar:
         background: #667eea !important; color: white !important; border-color: #667eea !important;
     }
     </style>
-    <div style="background:linear-gradient(135deg,#1e3c72 0%,#2a5298 100%);
-                border-radius:12px;padding:10px 14px;margin-bottom:10px;
-                display:flex;align-items:center;gap:10px;
-                box-shadow:0 3px 12px rgba(30,60,114,0.2);">
-      <div style="font-size:22px;line-height:1;">🤖</div>
-      <div>
-        <div style="color:white;font-weight:700;font-size:0.92rem;">EEE Career Advisor</div>
-      </div>
-    </div>
     """, unsafe_allow_html=True)
+    st.markdown("**🤖 EEE Career Advisor**")
 
     is_busy = st.session_state.get("_chat_busy", False)
 
     if is_busy:
         st.markdown("<div style='text-align:center;font-size:0.78rem;color:#999;padding:4px 0;'>⏳ Thinking…</div>", unsafe_allow_html=True)
 
-    components.html(_build_chat_html(st.session_state.chat_history), height=560, scrolling=True)
+    components.html(_build_chat_html(st.session_state.chat_history), height=420, scrolling=True)
 
     user_msg = st.chat_input("Ask about EEE careers…", key="chatbot_input")
     if user_msg and not is_busy:
