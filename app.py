@@ -24,7 +24,7 @@ st.set_page_config(
     page_title="EEE Career Pathways",
     page_icon="🎓",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # ========== Premium CSS ==========
@@ -33,7 +33,6 @@ st.markdown("""
 .stApp { background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); }
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-[data-testid="collapsedControl"] {display: none;}
 section[data-testid="stSidebar"] {display: block;}
 section[data-testid="stSidebar"] > div:first-child { padding-top: 1rem; }
 
