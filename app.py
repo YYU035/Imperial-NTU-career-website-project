@@ -46,8 +46,8 @@ header[data-testid="stHeader"] {
 
 /* Push the entire sidebar below Streamlit's top toolbar so it never covers it */
 section[data-testid="stSidebar"] {
-    top: 3.75rem !important;
-    height: calc(100vh - 3.75rem) !important;
+    top: 4rem !important;
+    height: calc(100vh - 4rem) !important;
     z-index: 100 !important;
 }
 
@@ -630,6 +630,20 @@ if "chat_history" not in st.session_state:
     ]
 
 with st.sidebar:
+    # Always-visible close button at the top of the panel
+    components.html("""
+    <div style="display:flex;justify-content:flex-end;padding:4px 4px 6px 0;">
+      <button onclick="(function(){try{
+        window.parent.document.querySelector('[data-testid=collapsedControl]').click();
+      }catch(e){}})()"
+        style="background:#fff;border:1.5px solid #ccc;border-radius:8px;
+               padding:4px 12px;cursor:pointer;font-size:13px;color:#444;
+               font-family:sans-serif;line-height:1.4;">
+        ✕ Close
+      </button>
+    </div>
+    """, height=38)
+
     st.markdown("""
     <style>
     section[data-testid="stSidebar"] { background: #f8f9ff; }
