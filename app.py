@@ -1130,7 +1130,8 @@ with tab5:
         fig_ind.update_layout(
             margin=dict(t=10, b=10, l=10, r=60), height=360,
             xaxis=dict(showgrid=False, visible=False),
-            yaxis=dict(tickfont=dict(size=12)),
+            yaxis=dict(tickfont=dict(size=12, color="#000000")),
+            font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         )
         st.plotly_chart(fig_ind, use_container_width=True, config={"displayModeBar": False})
@@ -1156,7 +1157,8 @@ with tab5:
         ))
         fig_opp.update_layout(
             margin=dict(t=10, b=10, l=10, r=10), height=360,
-            legend=dict(font=dict(size=10), orientation="v"),
+            legend=dict(font=dict(size=10, color="#000000"), orientation="v"),
+            font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)",
         )
         st.plotly_chart(fig_opp, use_container_width=True, config={"displayModeBar": False})
@@ -1183,6 +1185,7 @@ with tab5:
         ))
         fig_sun.update_layout(
             margin=dict(t=10, b=10, l=10, r=10), height=380,
+            font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)",
         )
         st.plotly_chart(fig_sun, use_container_width=True, config={"displayModeBar": False})
@@ -1203,7 +1206,8 @@ with tab5:
         fig_clust.update_layout(
             margin=dict(t=10, b=10, l=10, r=80), height=380,
             xaxis=dict(showgrid=False, visible=False),
-            yaxis=dict(tickfont=dict(size=11)),
+            yaxis=dict(tickfont=dict(size=11, color="#000000")),
+            font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         )
         st.plotly_chart(fig_clust, use_container_width=True, config={"displayModeBar": False})
@@ -1229,6 +1233,7 @@ with tab5:
         fig_dom.update_layout(
             margin=dict(t=10, b=10, l=10, r=10), height=300,
             showlegend=False,
+            font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)",
         )
         st.plotly_chart(fig_dom, use_container_width=True, config={"displayModeBar": False})
@@ -1259,8 +1264,9 @@ with tab5:
         ))
         fig_heat.update_layout(
             margin=dict(t=10, b=80, l=10, r=10), height=300,
-            xaxis=dict(tickangle=-30, tickfont=dict(size=10)),
-            yaxis=dict(tickfont=dict(size=10)),
+            xaxis=dict(tickangle=-30, tickfont=dict(size=10, color="#000000")),
+            yaxis=dict(tickfont=dict(size=10, color="#000000")),
+            font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         )
         st.plotly_chart(fig_heat, use_container_width=True, config={"displayModeBar": False})
