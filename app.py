@@ -59,9 +59,13 @@ section[data-testid="stSidebar"] {
     z-index: 999999 !important;
     display: flex !important;
     visibility: visible !important;
-    background: white !important;
+    background: #1a6b3c !important;
     border-radius: 0 6px 6px 0 !important;
-    box-shadow: 2px 0 6px rgba(0,0,0,0.15) !important;
+    box-shadow: 2px 0 8px rgba(0,0,0,0.25) !important;
+}
+[data-testid="collapsedControl"] svg {
+    fill: white !important;
+    color: white !important;
 }
 
 /* sidebar chat */
@@ -123,34 +127,6 @@ section[data-testid="stSidebar"] button[kind="secondary"]:hover {
 .footer { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 2rem; border-radius: 2rem 2rem 0 0; margin-top: 3rem; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
-
-# Force sidebar collapsed on every fresh page load (new session = _sidebar_init absent)
-if "_sidebar_init" not in st.session_state:
-    st.session_state["_sidebar_init"] = True
-    components.html("""
-    <script>
-    (function() {
-        var attempts = 0;
-        function tryCollapse() {
-            attempts++;
-            if (attempts > 15) return;
-            try {
-                var p = window.parent;
-                var sidebar = p.document.querySelector('section[data-testid="stSidebar"]');
-                if (!sidebar) { setTimeout(tryCollapse, 200); return; }
-                var rect = sidebar.getBoundingClientRect();
-                // rect.width > 50 and rect.left > -50 means sidebar is visibly open
-                if (rect.width > 50 && rect.left > -50) {
-                    var btn = p.document.querySelector('[data-testid="collapsedControl"]');
-                    if (btn) { btn.click(); return; }
-                }
-            } catch(e) {}
-            setTimeout(tryCollapse, 200);
-        }
-        setTimeout(tryCollapse, 300);
-    })();
-    </script>
-    """, height=0)
 
 # ========== Header ==========
 st.markdown("""
@@ -696,26 +672,17 @@ with st.sidebar:
         st.session_state["_chat_job"] = None
         st.rerun()
 
-    components.html("""
-    <div style="padding:4px 0 8px 0;">
-      <button onclick="(function(){
-        var p=window.parent, el;
-        var sels=['[data-testid=collapsedControl] button',
-                  '[data-testid=collapsedControl]',
-                  'button[aria-label=\\'Close sidebar\\']',
-                  'button[aria-label=\\'collapse sidebar\\']'];
-        for(var i=0;i<sels.length;i++){
-          el=p.document.querySelector(sels[i]);
-          if(el){el.click();break;}
-        }
-      })()"
-        style="width:100%;background:rgba(220,53,69,0.08);border:1.5px solid rgba(220,53,69,0.35);
-               border-radius:8px;padding:7px 0;cursor:pointer;font-size:13px;
-               color:#c0392b;font-family:sans-serif;font-weight:500;">
-        ✕ Close Panel
-      </button>
-    </div>
-    """, height=46)
+    st.markdown("""
+    <button onclick="(function(){
+      var sels=['[data-testid=collapsedControl] button','[data-testid=collapsedControl]'];
+      for(var i=0;i<sels.length;i++){var el=document.querySelector(sels[i]);if(el){el.click();return;}}
+    })()"
+      style="width:100%;background:rgba(220,53,69,0.08);border:1.5px solid rgba(220,53,69,0.35);
+             border-radius:8px;padding:7px 0;cursor:pointer;font-size:13px;
+             color:#c0392b;font-family:sans-serif;font-weight:500;margin-top:4px;">
+      ✕ Close Panel
+    </button>
+    """, unsafe_allow_html=True)
 
 
 # ========== Tabs ==========
