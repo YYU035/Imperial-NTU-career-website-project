@@ -46,8 +46,8 @@ header[data-testid="stHeader"] {
 
 /* Push the entire sidebar below Streamlit's top toolbar so it never covers it */
 section[data-testid="stSidebar"] {
-    top: 4rem !important;
-    height: calc(100vh - 4rem) !important;
+    top: 3.75rem !important;
+    height: calc(100vh - 3.75rem) !important;
     z-index: 100 !important;
 }
 
@@ -630,20 +630,6 @@ if "chat_history" not in st.session_state:
     ]
 
 with st.sidebar:
-    # Always-visible close button at the top of the panel
-    components.html("""
-    <div style="display:flex;justify-content:flex-end;padding:4px 4px 6px 0;">
-      <button onclick="(function(){try{
-        window.parent.document.querySelector('[data-testid=collapsedControl]').click();
-      }catch(e){}})()"
-        style="background:#fff;border:1.5px solid #ccc;border-radius:8px;
-               padding:4px 12px;cursor:pointer;font-size:13px;color:#444;
-               font-family:sans-serif;line-height:1.4;">
-        ✕ Close
-      </button>
-    </div>
-    """, height=38)
-
     st.markdown("""
     <style>
     section[data-testid="stSidebar"] { background: #f8f9ff; }
@@ -714,6 +700,20 @@ with st.sidebar:
         st.session_state["_chat_sector"] = None
         st.session_state["_chat_job"] = None
         st.rerun()
+
+    components.html("""
+    <div style="padding:4px 0 8px 0;">
+      <button onclick="(function(){try{
+        window.parent.document.querySelector('[data-testid=collapsedControl]').click();
+      }catch(e){}})()"
+        style="width:100%;background:rgba(220,53,69,0.08);border:1.5px solid rgba(220,53,69,0.35);
+               border-radius:8px;padding:7px 0;cursor:pointer;font-size:13px;
+               color:#c0392b;font-family:sans-serif;font-weight:500;
+               transition:background 0.15s;">
+        ✕ Close Panel
+      </button>
+    </div>
+    """, height=46)
 
 
 # ========== Tabs ==========
