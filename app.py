@@ -38,6 +38,8 @@ footer {visibility: hidden;}
 [data-testid="stText"], [data-testid="stCaptionContainer"],
 .stRadio label, .stSelectbox label, .stFileUploader label,
 .stCheckbox label, .stTextArea label { color: #1a1a2e !important; }
+/* Button text must be white — dark text inherits onto dark Streamlit buttons */
+.main button p, .main button span, .main button div { color: white !important; }
 
 /* Header always above everything */
 header[data-testid="stHeader"] {
