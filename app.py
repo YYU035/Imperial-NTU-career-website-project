@@ -33,7 +33,6 @@ st.markdown("""
 .stApp { background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); }
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-section[data-testid="stSidebar"] {display: block;}
 section[data-testid="stSidebar"] > div:first-child { padding-top: 1rem; }
 
 /* Global text colour fix — ensures dark text on light backgrounds */
