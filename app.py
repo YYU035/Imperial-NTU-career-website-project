@@ -672,17 +672,25 @@ with st.sidebar:
         st.session_state["_chat_job"] = None
         st.rerun()
 
-    st.markdown("""
+    st.html("""
     <button onclick="(function(){
-      var sels=['[data-testid=collapsedControl] button','[data-testid=collapsedControl]'];
-      for(var i=0;i<sels.length;i++){var el=document.querySelector(sels[i]);if(el){el.click();return;}}
+      var sels=[
+        '[data-testid=collapsedControl] button',
+        '[data-testid=collapsedControl]',
+        'button[aria-label*=sidebar i]',
+        'button[aria-label*=close i]'
+      ];
+      for(var i=0;i<sels.length;i++){
+        var el=document.querySelector(sels[i]);
+        if(el){el.click();return;}
+      }
     })()"
       style="width:100%;background:rgba(220,53,69,0.08);border:1.5px solid rgba(220,53,69,0.35);
              border-radius:8px;padding:7px 0;cursor:pointer;font-size:13px;
              color:#c0392b;font-family:sans-serif;font-weight:500;margin-top:4px;">
       ✕ Close Panel
     </button>
-    """, unsafe_allow_html=True)
+    """)
 
 
 # ========== Tabs ==========
