@@ -45,6 +45,19 @@ section[data-testid="stSidebar"] {
     height: calc(100vh - 3.75rem) !important;
 }
 
+/* Pin the sidebar toggle arrow so sidebar content can never cover it */
+[data-testid="collapsedControl"] {
+    position: fixed !important;
+    top: 4rem !important;
+    left: 0 !important;
+    z-index: 999999 !important;
+    display: flex !important;
+    visibility: visible !important;
+    background: white !important;
+    border-radius: 0 6px 6px 0 !important;
+    box-shadow: 2px 0 6px rgba(0,0,0,0.15) !important;
+}
+
 /* sidebar chat */
 section[data-testid="stSidebar"] .stChatInput { border-top: 1px solid #e0e0e0; padding-top: 6px; }
 section[data-testid="stSidebar"] .stButton button { border-radius: 8px !important; font-size: 0.78rem !important; }
@@ -599,15 +612,6 @@ with st.sidebar:
     </style>
     """, unsafe_allow_html=True)
 
-    # Close button — JS clicks the native Streamlit collapse control
-    components.html("""
-    <button onclick="window.parent.document.querySelector('[data-testid=\\"collapsedControl\\"]').click()"
-        style="float:right;background:none;border:1px solid #ccc;border-radius:6px;
-               padding:2px 10px;cursor:pointer;font-size:14px;color:#555;margin-bottom:4px;">
-        ✕ Close
-    </button>
-    """, height=36)
-
     st.markdown("**🤖 EEE Career Advisor**")
 
     is_busy = st.session_state.get("_chat_busy", False)
@@ -647,7 +651,7 @@ with st.sidebar:
             scols = st.columns(len(suggestions))
             for ci, (label, prompt) in enumerate(suggestions):
                 with scols[ci]:
-                    if st.button(label, key=f"sugg_{label}", use_container_width=True):
+                    if st.button(label, key=f"sugg_{label}", width='stretch'):
                         st.session_state["_chat_busy"] = True
                         st.session_state.chat_history.append({"role": "user", "text": prompt})
                         with st.spinner("Thinking…"):
@@ -655,7 +659,7 @@ with st.sidebar:
                         st.session_state["_chat_busy"] = False
                         st.rerun()
 
-    if st.button("🗑️ Clear chat", use_container_width=True):
+    if st.button("🗑️ Clear chat", width='stretch'):
         st.session_state.chat_history = [
             {"role": "bot", "text": "Chat cleared! Ask me anything about EEE careers."}
         ]
@@ -817,7 +821,7 @@ with tab2:
             with radar_col:
                 st.markdown("**🧠 Soft Skills Profile**")
                 fig = build_radar_chart(soft_skills_found)
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
                 detected_dims = [dim for dim, score in soft_skills_found.items() if score > 0]
                 if detected_dims:
                     st.caption("Detected: " + ", ".join(s.title() for s in detected_dims))
@@ -865,7 +869,7 @@ with tab2:
         # --- AI CV Feedback ---
         st.markdown("<h3 class='section-header'>🤖 AI CV Feedback</h3>", unsafe_allow_html=True)
         all_jobs_for_feedback = (strong + good + weak) if detected_skills else []
-        if st.button("✨ Get Personalised AI Feedback", type="primary", use_container_width=True):
+        if st.button("✨ Get Personalised AI Feedback", type="primary", width='stretch'):
             with st.spinner("Analysing your CV with AI…"):
                 feedback = _get_cv_ai_feedback(cv_text, detected_skills, all_jobs_for_feedback)
             st.session_state["_cv_ai_feedback"] = feedback
@@ -902,7 +906,7 @@ with tab2:
         )
         iv_c1, iv_c2 = st.columns(2)
         with iv_c1:
-            if st.button("🧠 Behavioural Interview", use_container_width=True):
+            if st.button("🧠 Behavioural Interview", width='stretch'):
                 for k in ("iv_mode","iv_history","iv_report","iv_busy","iv_started","iv_chat","iv_client"):
                     st.session_state.pop(k, None)
                 st.session_state.iv_mode = "active"
@@ -913,7 +917,7 @@ with tab2:
                 st.session_state.iv_busy = False
                 st.info("✅ Behavioural interview ready. Go to the **🎤 Mock Interview** tab to begin!")
         with iv_c2:
-            if st.button(f"⚙️ Technical: {_cv_guessed_topic}", use_container_width=True):
+            if st.button(f"⚙️ Technical: {_cv_guessed_topic}", width='stretch'):
                 for k in ("iv_mode","iv_history","iv_report","iv_busy","iv_started","iv_chat","iv_client"):
                     st.session_state.pop(k, None)
                 st.session_state.iv_mode = "active"
@@ -983,7 +987,7 @@ with tab3:
                 else:
                     st.warning("⚠️ Upload your CV in the **CV Analysis** tab first.")
 
-        if st.button("🚀 Start Interview", type="primary", use_container_width=True):
+        if st.button("🚀 Start Interview", type="primary", width='stretch'):
             if "CV Deep Dive" in iv_type_sel and not st.session_state.get("_cv_text"):
                 st.error("Please upload your CV in the CV Analysis tab first.")
             else:
@@ -1039,7 +1043,7 @@ with tab3:
 
         ba, bb = st.columns(2)
         with ba:
-            if st.button("📨 Submit Answer", type="primary", use_container_width=True,
+            if st.button("📨 Submit Answer", type="primary", width='stretch',
                          disabled=st.session_state.iv_busy or not answer.strip()):
                 st.session_state.iv_busy = True
                 st.session_state.iv_history.append({"role": "student", "text": answer.strip()})
@@ -1059,7 +1063,7 @@ with tab3:
                     st.session_state.iv_mode = "done"
                 st.rerun()
         with bb:
-            if st.button("🏁 End & Get Report", use_container_width=True, disabled=st.session_state.iv_busy):
+            if st.button("🏁 End & Get Report", width='stretch', disabled=st.session_state.iv_busy):
                 st.session_state.iv_busy = True
                 with st.spinner("Generating your report…"):
                     report = _iv_call(
@@ -1089,7 +1093,7 @@ with tab3:
         else:
             st.info("No report generated.")
 
-        if st.button("🔄 Start New Interview", type="primary", use_container_width=True):
+        if st.button("🔄 Start New Interview", type="primary", width='stretch'):
             for k in ("iv_mode","iv_history","iv_report","iv_busy","iv_started","iv_type","iv_topic","iv_chat","iv_client"):
                 st.session_state.pop(k, None)
             st.rerun()
@@ -1138,7 +1142,7 @@ with tab5:
             font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_ind, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_ind, width='stretch', config={"displayModeBar": False})
 
     with r1c2:
         st.markdown("#### 🎯 Opportunity Types")
@@ -1165,7 +1169,7 @@ with tab5:
             font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_opp, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_opp, width='stretch', config={"displayModeBar": False})
 
     # ── Row 2: SkillsFuture sunburst  +  Taxonomy skill clusters ──────────────
     r2c1, r2c2 = st.columns([2, 3])
@@ -1192,7 +1196,7 @@ with tab5:
             font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_sun, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_sun, width='stretch', config={"displayModeBar": False})
 
     with r2c2:
         st.markdown("#### 🧩 Skill Taxonomy: Top Clusters")
@@ -1214,7 +1218,7 @@ with tab5:
             font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_clust, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_clust, width='stretch', config={"displayModeBar": False})
 
     # ── Row 3: Course catalog breakdown  +  Contract type donut ──────────────
     r3c1, r3c2 = st.columns([2, 3])
@@ -1240,7 +1244,7 @@ with tab5:
             font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_dom, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_dom, width='stretch', config={"displayModeBar": False})
 
     with r3c2:
         st.markdown("#### 🔗 Taxonomy Skill Clusters → Sector Presence")
@@ -1273,7 +1277,7 @@ with tab5:
             font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_heat, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_heat, width='stretch', config={"displayModeBar": False})
 
 # Footer
 st.markdown("""<div class='footer'><h3>🎓 EEE Career Pathways Platform</h3><p>NTU Singapore • 2026</p></div>""", unsafe_allow_html=True)
