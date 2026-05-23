@@ -256,3 +256,45 @@ def query_sector_match_agent(
         "_raw":           raw_text,
         "_output_tokens": getattr(response.usage, "output_tokens", None),
     }
+
+def query_chat_agent(
+    conversation: list[dict],
+    cv_text: str | None = None,
+    career_goal: str | None = None,
+) -> str:
+    """
+    General-purpose sidebar chatbot agent.
+    Accepts a conversation history (list of {"role": "user"|"bot", "text": ...})
+    and returns the agent's plain-text reply.
+
+    Conversation is flattened into a single input string because Azure AI
+    Foundry Agent Applications are stateless (no thread/session memory).
+    """
+    history_lines = []
+
+    # ── Context preamble (injected once at the top) ──────────────────────
+    if career_goal:
+        history_lines.append(f"Student's Career Goal: {career_goal}")
+    if cv_text:
+        history_lines.append(f"Student's CV (first 3000 chars):\n{cv_text[:3000]}")
+    if career_goal or cv_text:
+        history_lines.append("---")
+
+    # ── Conversation history ──────────────────────────────────────────────
+    for msg in conversation[-20:]:          # cap at last 20 turns to stay within token limits
+        speaker = "Student" if msg["role"] == "user" else "Advisor"
+        history_lines.append(f"{speaker}: {msg['text']}")
+
+    full_input = "\n\n".join(history_lines)
+
+    client = OpenAI(
+        api_key=st.secrets["AZURE_API_KEY"],
+        base_url=st.secrets["AZURE_CHAT_API_URL"],   # new secret — see Step 2
+        default_query={"api-version": "2025-11-15-preview"},
+    )
+
+    try:
+        response = client.responses.create(input=full_input)
+        return response.output_text.strip()
+    except Exception as e:
+        raise RuntimeError(f"Chat agent call failed: {e}") from e

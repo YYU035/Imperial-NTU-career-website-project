@@ -9,9 +9,10 @@ import os
 import sys
 import plotly.graph_objects as go
 import streamlit.components.v1 as components
-from agent_api import query_agent, query_job_match_agent, query_interview_agent, query_specific_job_agent, query_sector_match_agent
+from agent_api import query_agent, query_job_match_agent, query_interview_agent, query_specific_job_agent, query_sector_match_agent, query_chat_agent
 import streamlit_mic_recorder 
 from tts_utils import text_to_speech_gtts
+import html as _html
 
 # ========== Page Configuration — MUST be first Streamlit command ==========
 st.set_page_config(
@@ -28,7 +29,6 @@ st.markdown("""
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 [data-testid="collapsedControl"] {display: none;}
-section[data-testid="stSidebar"] {display: none;}
 
 .main-header {
     background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
@@ -68,9 +68,69 @@ section[data-testid="stSidebar"] {display: none;}
 .course-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 1rem; padding: 1.5rem; margin: 0.8rem 0; }
 .section-header { font-size: 1.8rem; font-weight: 700; color: #1e3c72; margin: 2rem 0 1rem 0; padding-bottom: 0.5rem; border-bottom: 3px solid #667eea; display: inline-block; }
 .footer { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 2rem; border-radius: 2rem 2rem 0 0; margin-top: 3rem; text-align: center; }
+.main .block-container, [data-testid="stMarkdownContainer"],
+[data-testid="stText"], [data-testid="stCaptionContainer"],
+.stRadio label, .stSelectbox label, .stFileUploader label,
+.stCheckbox label, .stTextArea label { color: #1a1a2e !important; }
+
+/* Button text white */
+.main button, .main button p, .main button span, .main button div { color: white !important; }
+
+/* Header always above everything */
+header[data-testid="stHeader"] {
+    z-index: 2147483647 !important;
+    position: fixed !important;
+}
+
+/* Hide native sidebar arrow */
+[data-testid="collapsedControl"] { display: none !important; }
+
+/* File uploader button */
+[data-testid="stFileUploaderDropzone"] button,
+[data-testid="stFileUploaderDropzone"] button span {
+    color: white !important;
+    background-color: #3a3a5c !important;
+}
+
+/* Sidebar chat styles */
+section[data-testid="stSidebar"] { background: #f8f9ff; }
+section[data-testid="stSidebar"] .stChatInput { border-top: 1px solid #e0e0e0; padding-top: 6px; }
+section[data-testid="stSidebar"] .stButton button { border-radius: 8px !important; font-size: 0.78rem !important; }
+section[data-testid="stSidebar"] .stChatInput textarea { font-size: 0.88rem; }
+section[data-testid="stSidebar"] button[kind="secondary"] {
+    border-radius: 20px !important; font-size: 0.78rem !important;
+    padding: 4px 10px !important; border: 1.5px solid #dde !important;
+    background: white !important; color: #444 !important;
+    transition: all 0.15s !important;
+}
+section[data-testid="stSidebar"] button[kind="secondary"]:hover {
+    background: #667eea !important; color: white !important; border-color: #667eea !important;
+}
+
+/* Close Panel button — red tint */
+section[data-testid="stSidebar"] button[key="close_sidebar_btn"] {
+    background: rgba(220,53,69,0.08) !important;
+    border: 1.5px solid rgba(220,53,69,0.4) !important;
+    color: #c0392b !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
+# ========== Sidebar Visibility ==========
+if "sidebar_visible" not in st.session_state:
+    st.session_state["sidebar_visible"] = False
 
+if st.session_state["sidebar_visible"]:
+    st.markdown("""<style>
+    section[data-testid="stSidebar"] {
+        display: flex !important; visibility: visible !important;
+        transform: none !important; min-width: 244px !important;
+    }
+    </style>""", unsafe_allow_html=True)
+else:
+    st.markdown("""<style>
+    section[data-testid="stSidebar"] { display: none !important; }
+    </style>""", unsafe_allow_html=True)
 # ========== Header ==========
 st.markdown("""
 <div class='main-header'>
@@ -175,6 +235,31 @@ def detect_soft_skills_from_text(cv_text: str) -> list:
         if any(kw in text_lower for kw in keywords):
             found.append(dim)
     return found
+
+
+
+def _build_system_prompt() -> str:
+    try:
+        sectors = platform.get_sectors()
+        sector_list = ", ".join(s.title() for s in sectors)
+    except Exception:
+        sector_list = "Semiconductor, ICT, Power & Energy, Telecommunications, Defence, Biomedical, Aerospace"
+    return f"""You are an EEE (Electrical & Electronic Engineering) Career Advisor chatbot \
+embedded in the EEE Career Pathways platform.
+
+The platform contains:
+- Job postings across these sectors: {sector_list}
+- NTU EEE course catalog matched to job roles via TF-IDF similarity
+- SkillsFuture Singapore TSC (Technical Skills & Competencies) framework data
+- CV analysis: skill extraction, job match scoring, soft-skills radar
+
+Salary benchmarks (Singapore, 2024-2025):
+- Fresh grad: S$3,500–S$4,800/month (semiconductor fabs often S$4,200–S$4,800)
+- 3–5 years: S$5,500–S$9,000/month
+- Senior (7+ yrs): S$8,000–S$15,000+/month
+
+Answer concisely since you appear in a sidebar. Use bullet points and bold text for clarity.
+When asked about specific roles or skills, give concrete, practical advice for EEE students."""
 
 
 def build_radar_chart(soft_skills_found):
@@ -816,6 +901,263 @@ def generate_interview_pdf(conversation: list, career_goal: str, interview_type:
         pdf.ln(3)
 
     return bytes(pdf.output())
+
+# ========== Sidebar Chat HTML Renderer ==========
+
+def _build_chat_html(history: list) -> str:
+    """
+    Renders the full conversation as a self-contained HTML bubble layout
+    with auto-scroll to the latest message.
+    """
+    msgs = ""
+    for msg in history:
+        # Sanitise and lightly format the text
+        safe = _html.escape(msg["text"])
+        safe = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', safe)
+        safe = re.sub(r'\*(.+?)\*',     r'<em>\1</em>',         safe)
+        safe = safe.replace('\n', '<br>')
+
+        if msg["role"] == "bot":
+            msgs += f"""
+            <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:14px;">
+              <div style="min-width:32px;height:32px;border-radius:50%;
+                background:linear-gradient(135deg,#1e3c72,#2a5298);
+                display:flex;align-items:center;justify-content:center;
+                font-size:16px;flex-shrink:0;">🤖</div>
+              <div style="background:white;border-radius:4px 18px 18px 18px;
+                padding:10px 14px;max-width:86%;font-size:12.5px;line-height:1.65;
+                color:#1a1a2e;box-shadow:0 2px 10px rgba(0,0,0,0.09);">{safe}</div>
+            </div>"""
+        else:
+            msgs += f"""
+            <div style="display:flex;align-items:flex-start;gap:8px;
+              margin-bottom:14px;flex-direction:row-reverse;">
+              <div style="min-width:32px;height:32px;border-radius:50%;
+                background:linear-gradient(135deg,#667eea,#764ba2);
+                display:flex;align-items:center;justify-content:center;
+                font-size:16px;flex-shrink:0;">🎓</div>
+              <div style="background:linear-gradient(135deg,#667eea,#764ba2);
+                border-radius:18px 4px 18px 18px;padding:10px 14px;max-width:86%;
+                font-size:12.5px;line-height:1.65;color:white;">{safe}</div>
+            </div>"""
+
+    if not msgs:
+        msgs = (
+            '<p style="text-align:center;color:#aaa;font-size:12px;padding:24px 0;">'
+            'Ask me anything below 👇</p>'
+        )
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(160deg, #f0f4ff 0%, #f5f0ff 100%);
+    padding: 12px 10px;
+  }}
+</style></head>
+<body>
+  {msgs}
+  <div id="scroll-anchor"></div>
+  <script>
+    document.getElementById("scroll-anchor").scrollIntoView({{ behavior: "smooth" }});
+  </script>
+</body></html>"""
+
+# ========== Sidebar Chatbot (Azure AI Agent) ==========
+
+# Initialise chat history with a welcome message
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = [
+        {
+            "role": "bot",
+            "text": (
+                "Hi! 👋 I'm your EEE Career Advisor, powered by Azure AI.\n\n"
+                "I can help with:\n"
+                "• **Career paths** for EEE graduates\n"
+                "• **Salary benchmarks** in Singapore\n"
+                "• **Skills** to develop for your target role\n"
+                "• **Internship & job search** tips\n\n"
+                "Ask me anything, or tap a suggestion below!"
+            ),
+        }
+    ]
+
+with st.sidebar:
+    st.markdown("### 🤖 EEE Career Advisor")
+    st.markdown(
+        "<small style='color:#888'>Powered by Azure AI Foundry</small>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("---")
+
+    # ── Busy indicator ────────────────────────────────────────────────────
+    is_busy = st.session_state.get("_chat_busy", False)
+    if is_busy:
+        st.markdown(
+            "<div style='text-align:center;font-size:0.78rem;color:#999;padding:4px 0;'>"
+            "⏳ Thinking…</div>",
+            unsafe_allow_html=True,
+        )
+
+    # ── Chat bubble display ───────────────────────────────────────────────
+    components.html(
+        _build_chat_html(st.session_state["chat_history"]),
+        height=420,
+        scrolling=True,
+    )
+
+    # ── Chat input ────────────────────────────────────────────────────────
+    user_msg = st.chat_input("Ask about EEE careers…", key="chatbot_input")
+
+    if user_msg and not is_busy:
+        st.session_state["_chat_busy"] = True
+        st.session_state["chat_history"].append({"role": "user", "text": user_msg})
+
+        # Pass CV and career goal as context if available
+        _cv_ctx    = st.session_state.get("_cv_text")
+        _goal_ctx  = st.session_state.get("_agent_result_key", "").split("|")[-1] or None
+
+        with st.spinner("Thinking…"):
+            try:
+                reply = query_chat_agent(
+                    conversation=st.session_state["chat_history"],
+                    cv_text=_cv_ctx,
+                    career_goal=_goal_ctx,
+                )
+            except Exception as _e:
+                reply = f"⚠️ Agent error: {_e}"
+
+        st.session_state["chat_history"].append({"role": "bot", "text": reply})
+        st.session_state["_chat_busy"] = False
+        st.rerun()
+
+    # ── Smart follow-up suggestions ───────────────────────────────────────
+    if st.session_state["chat_history"] and not is_busy:
+        last_bot = next(
+            (m["text"] for m in reversed(st.session_state["chat_history"])
+             if m["role"] == "bot"),
+            "",
+        )
+        # _follow_map = [
+        #     (
+        #         ["salary", "pay", "compensation", "earn"],
+        #         [
+        #             ("💰 Fresh grad pay?",
+        #              "What is the typical fresh graduate salary for EEE in Singapore?"),
+        #             ("📈 Salary growth?",
+        #              "How does EEE salary grow with years of experience?"),
+        #         ],
+        #     ),
+        #     (
+        #         ["skill", "python", "matlab", "machine learn", "learn"],
+        #         [
+        #             ("🛠️ Must-have skills?",
+        #              "What are the top 3 must-have technical skills for EEE graduates?"),
+        #             ("📚 Best resources?",
+        #              "What are the best free resources to learn these skills?"),
+        #         ],
+        #     ),
+        #     (
+        #         ["internship", "intern", "placement"],
+        #         [
+        #             ("🔍 How to find one?",
+        #              "How do I find EEE internships in Singapore?"),
+        #             ("📄 Application tips?",
+        #              "What should I include in my internship application?"),
+        #         ],
+        #     ),
+        #     (
+        #         ["cv", "resume", "portfolio"],
+        #         [
+        #             ("✅ CV checklist?",
+        #              "What should every EEE student include in their CV?"),
+        #             ("⚠️ Common mistakes?",
+        #              "What are the most common CV mistakes EEE students make?"),
+        #         ],
+        #     ),
+        #     (
+        #         ["career", "path", "role", "job", "sector", "industry"],
+        #         [
+        #             ("🚀 Best entry roles?",
+        #              "What are the best entry-level roles for EEE graduates?"),
+        #             ("🏢 Top employers?",
+        #              "Which companies hire the most EEE graduates in Singapore?"),
+        #         ],
+        #     ),
+        # ]
+
+        suggestions = []
+        last_lower = last_bot.lower()
+        # for keywords, prompts in _follow_map:
+        #     if any(k in last_lower for k in keywords):
+        #         suggestions = prompts
+        #         break
+
+        if suggestions:
+            st.markdown(
+                "<p style='font-size:0.72rem;color:#aaa;margin:6px 0 4px;"
+                "text-align:center;'>💡 Suggested follow-ups</p>",
+                unsafe_allow_html=True,
+            )
+            s_cols = st.columns(len(suggestions))
+            for ci, (label, prompt) in enumerate(suggestions):
+                with s_cols[ci]:
+                    if st.button(label, key=f"sugg_{ci}_{label[:8]}"):
+                        st.session_state["_chat_busy"] = True
+                        st.session_state["chat_history"].append(
+                            {"role": "user", "text": prompt}
+                        )
+                        _cv_ctx   = st.session_state.get("_cv_text")
+                        _goal_ctx = st.session_state.get("_agent_result_key", "").split("|")[-1] or None
+                        with st.spinner("Thinking…"):
+                            try:
+                                reply = query_chat_agent(
+                                    conversation=st.session_state["chat_history"],
+                                    cv_text=_cv_ctx,
+                                    career_goal=_goal_ctx,
+                                )
+                            except Exception as _e:
+                                reply = f"⚠️ Agent error: {_e}"
+                        st.session_state["chat_history"].append(
+                            {"role": "bot", "text": reply}
+                        )
+                        st.session_state["_chat_busy"] = False
+                        st.rerun()
+
+    st.markdown("---")
+
+    # ── Clear & Close ─────────────────────────────────────────────────────
+    clear_col, close_col = st.columns(2)
+    with clear_col:
+        if st.button("🗑️ Clear", use_container_width=True, key="clear_chat_btn"):
+            st.session_state["chat_history"] = [
+                {
+                    "role": "bot",
+                    "text": "Chat cleared! What would you like to know about EEE careers?",
+                }
+            ]
+            st.rerun()
+    with close_col:
+        if st.button(
+            "✕ Close",
+            key="close_sidebar_btn",
+            use_container_width=True,
+        ):
+            st.session_state["sidebar_visible"] = False
+            st.rerun()
+
+# ── Chat open button (sits below the main header) ─────────────────────────
+_hcol1, _hcol2 = st.columns([5, 1])
+with _hcol2:
+    if st.button(
+        "💬 AI Advisor",
+        type="primary",
+        use_container_width=True,
+        key="open_chat_header_btn",
+    ):
+        st.session_state["sidebar_visible"] = True
+        st.rerun()
 # ========== Tabs ==========
 # tab_profile, tab_roadmap = st.tabs(["👤 My Profile", "🗺️ My Roadmap"])
 
