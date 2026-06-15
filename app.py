@@ -130,7 +130,7 @@ section[data-testid="stSidebar"] button[kind="secondary"]:hover {
 div[data-testid="stRadio"] { display: flex; justify-content: center; width: 100%; }
 div[data-testid="stRadio"] > div {
     display: flex; gap: 0; background: #e4e8ec; border-radius: 2rem;
-    padding: 4px; width: 80%; max-width: 700px;
+    padding: 4px; width: 100%;
 }
 div[data-testid="stRadio"] > div > label {
     flex: 1; text-align: center; padding: 0.6rem 1.4rem; border-radius: 2rem; cursor: pointer;
@@ -147,6 +147,9 @@ div[data-testid="stRadio"] > div > label:has(input:checked) div {
     color: white !important;
 }
 div[data-testid="stRadio"] > div > label input { display: none; }
+/* View details button in course explore mode */
+button[kind="secondary"] { background: #1e3c72 !important; color: white !important; border: none !important; }
+button[kind="secondary"] p { color: white !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -775,20 +778,26 @@ with tab1:
                     st.session_state["course_explore_selected_role"] = None
 
                 for rank, role in enumerate(matched_roles, 1):
-                    match_pct = int(role["score"] * 100)
+                    score = role["score"]
+                    if score >= 0.05:
+                        match_label, match_class, badge_class = "Strong Match", "high-match", "similarity-high"
+                    elif score >= 0.02:
+                        match_label, match_class, badge_class = "Good Match", "good-match", "similarity-good"
+                    else:
+                        match_label, match_class, badge_class = "Possible Match", "medium-match", "similarity-medium"
                     role_key = f"{role['sector']}||{role['job_title']}"
                     is_selected = st.session_state["course_explore_selected_role"] == role_key
 
                     col_r, col_btn = st.columns([5, 1])
                     with col_r:
                         st.markdown(f"""
-                        <div class='job-card {"high-match" if match_pct >= 15 else "good-match" if match_pct >= 8 else "medium-match"}'>
+                        <div class='job-card {match_class}'>
                             <div style='display:flex;justify-content:space-between;align-items:center;'>
                                 <div>
                                     <h4 style='margin:0;'>{rank}. {str(role['job_title']).title()}</h4>
                                     <p style='margin:0.3rem 0 0 0;color:#666;font-size:0.9rem;'>🏭 {str(role['sector']).title()}</p>
                                 </div>
-                                <div class='similarity-badge {"similarity-high" if match_pct >= 15 else "similarity-good" if match_pct >= 8 else "similarity-medium"}'>{match_pct}% match</div>
+                                <div class='similarity-badge {badge_class}'>{match_label}</div>
                             </div>
                         </div>""", unsafe_allow_html=True)
                     with col_btn:
