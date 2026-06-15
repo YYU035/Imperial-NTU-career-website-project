@@ -16,13 +16,15 @@ import streamlit as st
 import re
 import sys
 import collections
+import base64
+from pathlib import Path
 import plotly.graph_objects as go
 import streamlit.components.v1 as components
 
 # ========== Page Configuration — MUST be first Streamlit command ==========
 st.set_page_config(
-    page_title="EEE Career Pathways",
-    page_icon="🎓",
+    page_title="NTU EEE Career Pathways Platform",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -33,13 +35,55 @@ st.markdown("""
 .stApp { background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); }
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-[data-testid="collapsedControl"] {display: none;}
-section[data-testid="stSidebar"] {display: block;}
-section[data-testid="stSidebar"] > div:first-child { padding-top: 1rem; }
+/* Global text colour fix — ensures dark text on light backgrounds */
+.main .block-container, [data-testid="stMarkdownContainer"],
+[data-testid="stText"], [data-testid="stCaptionContainer"],
+.stRadio label, .stSelectbox label, .stFileUploader label,
+.stCheckbox label, .stTextArea label { color: #1a1a2e !important; }
+/* Button text must be white — dark text inherits onto dark Streamlit buttons */
+.main button, .main button p, .main button span, .main button div { color: white !important; }
+
+/* Header always above everything */
+header[data-testid="stHeader"] {
+    z-index: 2147483647 !important;
+    position: fixed !important;
+}
+
+/* Hide the native Streamlit sidebar arrow — we use our own buttons */
+[data-testid="collapsedControl"] { display: none !important; }
+
+/* File uploader button text white */
+[data-testid="stFileUploaderDropzone"] button,
+[data-testid="stFileUploaderDropzone"] button span,
+[data-testid="stFileUploaderDropzone"] button p,
+[data-testid="stFileUploadDropzone"] button,
+[data-testid="stFileUploadDropzone"] button span,
+.stFileUploader button, .stFileUploader button span, .stFileUploader button p {
+    color: white !important;
+    background-color: #3a3a5c !important;
+}
 
 /* sidebar chat */
+section[data-testid="stSidebar"] { background: #f8f9ff; }
+/* Close Panel button — red tint */
+section[data-testid="stSidebar"] button[key="close_sidebar_btn"],
+section[data-testid="stSidebar"] div:has(button[key="close_sidebar_btn"]) button {
+    background: rgba(220,53,69,0.08) !important;
+    border: 1.5px solid rgba(220,53,69,0.4) !important;
+    color: #c0392b !important;
+}
 section[data-testid="stSidebar"] .stChatInput { border-top: 1px solid #e0e0e0; padding-top: 6px; }
-section[data-testid="stSidebar"] button[kind="secondary"] { border-radius: 8px !important; font-size: 0.78rem !important; }
+section[data-testid="stSidebar"] .stButton button { border-radius: 8px !important; font-size: 0.78rem !important; }
+section[data-testid="stSidebar"] .stChatInput textarea { font-size: 0.88rem; }
+section[data-testid="stSidebar"] button[kind="secondary"] {
+    border-radius: 20px !important; font-size: 0.78rem !important;
+    padding: 4px 10px !important; border: 1.5px solid #dde !important;
+    background: white !important; color: #444 !important;
+    transition: all 0.15s !important;
+}
+section[data-testid="stSidebar"] button[kind="secondary"]:hover {
+    background: #667eea !important; color: white !important; border-color: #667eea !important;
+}
 
 .main-header {
     background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
@@ -50,25 +94,27 @@ section[data-testid="stSidebar"] button[kind="secondary"] { border-radius: 8px !
 .main-header p { color: rgba(255,255,255,0.9); font-size: 1.1rem; margin-top: 0.5rem; }
 
 .stTabs [data-baseweb="tab-list"] { gap: 8px; background: white; padding: 0.5rem; border-radius: 1rem; }
-.stTabs [data-baseweb="tab"] { padding: 0.8rem 1.5rem; border-radius: 0.8rem; font-weight: 600; }
+.stTabs [data-baseweb="tab"] { padding: 0.8rem 1.5rem; border-radius: 0.8rem; font-weight: 600; color: #1a1a2e !important; }
 .stTabs [aria-selected="true"] { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important; color: white !important; }
 
-.glass-card { background: rgba(255,255,255,0.95); border-radius: 1.2rem; padding: 1.8rem; box-shadow: 0 8px 32px rgba(0,0,0,0.08); margin: 1rem 0; }
+.glass-card { background: rgba(255,255,255,0.95); border-radius: 1.2rem; padding: 1.8rem; box-shadow: 0 8px 32px rgba(0,0,0,0.08); margin: 1rem 0; color: #1a1a2e; }
+.glass-card h4, .glass-card p, .glass-card span { color: #1a1a2e; }
 .gradient-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 1.2rem; padding: 1.8rem; margin: 1rem 0; }
 .gradient-card-blue { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; border-radius: 1.2rem; padding: 1.8rem; margin: 1rem 0; }
 
-.info-box { background: linear-gradient(135deg, #e0f7fa 0%, #b2ebf2 100%); border-left: 5px solid #00bcd4; border-radius: 0 1rem 1rem 0; padding: 1.2rem 1.5rem; margin: 1rem 0; }
-.success-box { background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border-left: 5px solid #4caf50; border-radius: 0 1rem 1rem 0; padding: 1.2rem 1.5rem; margin: 1rem 0; }
-.warning-box { background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%); border-left: 5px solid #ff9800; border-radius: 0 1rem 1rem 0; padding: 1.2rem 1.5rem; margin: 1rem 0; }
+.info-box { background: linear-gradient(135deg, #e0f7fa 0%, #b2ebf2 100%); border-left: 5px solid #00bcd4; border-radius: 0 1rem 1rem 0; padding: 1.2rem 1.5rem; margin: 1rem 0; color: #1a1a2e; }
+.success-box { background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border-left: 5px solid #4caf50; border-radius: 0 1rem 1rem 0; padding: 1.2rem 1.5rem; margin: 1rem 0; color: #1a1a2e; }
+.warning-box { background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%); border-left: 5px solid #ff9800; border-radius: 0 1rem 1rem 0; padding: 1.2rem 1.5rem; margin: 1rem 0; color: #1a1a2e; }
 
-.metric-container { background: white; border-radius: 1rem; padding: 1.5rem; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+.metric-container { background: white; border-radius: 1rem; padding: 1.5rem; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.08); color: #1a1a2e; }
 .metric-value { font-size: 2.5rem; font-weight: 700; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 .metric-label { color: #666; font-size: 0.95rem; font-weight: 500; margin-top: 0.5rem; }
 
 .skill-progress { background: #e0e0e0; border-radius: 1rem; height: 12px; overflow: hidden; margin: 0.5rem 0; }
 .skill-progress-fill { height: 100%; border-radius: 1rem; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); }
 
-.job-card { background: white; border-radius: 1rem; padding: 1.5rem; margin: 1rem 0; border-left: 5px solid #667eea; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+.job-card { background: white; border-radius: 1rem; padding: 1.5rem; margin: 1rem 0; border-left: 5px solid #667eea; box-shadow: 0 4px 15px rgba(0,0,0,0.08); color: #1a1a2e; }
+.job-card h4 { color: #1a1a2e; }
 .job-card.high-match { border-left-color: #4caf50; }
 .job-card.good-match { border-left-color: #2196f3; }
 .job-card.medium-match { border-left-color: #ff9800; }
@@ -81,24 +127,88 @@ section[data-testid="stSidebar"] button[kind="secondary"] { border-radius: 8px !
 .course-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 1rem; padding: 1.5rem; margin: 0.8rem 0; }
 .section-header { font-size: 1.8rem; font-weight: 700; color: #1e3c72; margin: 2rem 0 1rem 0; padding-bottom: 0.5rem; border-bottom: 3px solid #667eea; display: inline-block; }
 .footer { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 2rem; border-radius: 2rem 2rem 0 0; margin-top: 3rem; text-align: center; }
+
+/* Pill toggle for Tab 1 mode switch */
+div[data-testid="stRadio"] { display: flex !important; justify-content: center !important; width: 100% !important; margin: 0 !important; }
+div[data-testid="stRadio"] > div {
+    display: flex; gap: 0; background: #e4e8ec; border-radius: 2rem;
+    padding: 4px; width: 100% !important;
+}
+div[data-testid="stRadio"] > div > label {
+    flex: 1; text-align: center; padding: 0.6rem 1.4rem; border-radius: 2rem; cursor: pointer;
+    font-weight: 600; font-size: 0.95rem; color: #1a1a2e !important;
+    transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+div[data-testid="stRadio"] > div > label:has(input:checked) {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    box-shadow: 0 2px 8px rgba(30,60,114,0.3);
+}
+div[data-testid="stRadio"] > div > label:has(input:checked) p,
+div[data-testid="stRadio"] > div > label:has(input:checked) span,
+div[data-testid="stRadio"] > div > label:has(input:checked) div {
+    color: white !important;
+}
+div[data-testid="stRadio"] > div > label input { display: none; }
+/* Expander content — white background, dark text */
+[data-testid="stExpander"] { background: white !important; border-radius: 0.5rem; }
+[data-testid="stExpander"] details { background: white !important; }
+[data-testid="stExpander"] summary { color: #1a1a2e !important; font-weight: 600; }
+[data-testid="stExpander"] div[data-testid="stExpanderDetails"] { background: white !important; color: #1a1a2e !important; }
 </style>
 """, unsafe_allow_html=True)
 
+# ========== Sidebar visibility (CSS-only, no JS needed) ==========
+if "sidebar_visible" not in st.session_state:
+    st.session_state["sidebar_visible"] = False
+
+if st.session_state["sidebar_visible"]:
+    st.markdown("""<style>
+    section[data-testid="stSidebar"] {
+        display: flex !important; visibility: visible !important;
+        transform: none !important; min-width: 244px !important;
+    }
+    </style>""", unsafe_allow_html=True)
+else:
+    st.markdown("""<style>
+    section[data-testid="stSidebar"] { display: none !important; }
+    </style>""", unsafe_allow_html=True)
+
 # ========== Header ==========
-st.markdown("""
-<div class='main-header'>
-    <h1>🎓 EEE Career Pathways Platform</h1>
-    <p>Career Guidance for Electrical & Electronic Engineering Students</p>
-    <div style="margin-top:14px;background:rgba(255,255,255,0.15);border-radius:10px;padding:10px 16px;display:inline-flex;align-items:center;gap:10px;cursor:pointer;">
-      <span style="font-size:22px;">🤖</span>
-      <span style="color:white;font-size:0.9rem;"><strong>AI Career Advisor</strong> — Ask about salaries, skills, career paths & more <span style="opacity:0.75;font-size:0.8rem;">← chat panel on the left</span></span>
+_logo_path = Path(__file__).parent / "ntu_eee_logo.png"
+_logo_b64 = base64.b64encode(_logo_path.read_bytes()).decode() if _logo_path.exists() else ""
+_logo_html = f"<img src='data:image/png;base64,{_logo_b64}' style='height:64px;border-radius:10px;background:white;padding:6px 10px;flex-shrink:0;'>" if _logo_b64 else ""
+
+_hive_path = Path(__file__).parent / "ntu_hive.jpeg"
+_hive_b64 = base64.b64encode(_hive_path.read_bytes()).decode() if _hive_path.exists() else ""
+
+_imp_logo_path = Path(__file__).parent / "imperial_logo.png"
+_imp_logo_b64 = base64.b64encode(_imp_logo_path.read_bytes()).decode() if _imp_logo_path.exists() else ""
+
+_hive_img_html = (
+    f"<img src='data:image/jpeg;base64,{_hive_b64}' "
+    f"style='position:absolute;top:0;left:50%;transform:translateX(-50%);"
+    f"height:100%;width:auto;min-width:55%;object-fit:cover;"
+    f"-webkit-mask-image:linear-gradient(to right,transparent 0%,black 30%,black 70%,transparent 100%);"
+    f"mask-image:linear-gradient(to right,transparent 0%,black 30%,black 70%,transparent 100%);"
+    f"opacity:0.35;pointer-events:none;'>"
+) if _hive_b64 else ""
+
+st.markdown(f"""
+<div class='main-header' style='position:relative;overflow:hidden;'>
+    {_hive_img_html}
+    <div style='display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1;'>
+        <div>
+            <h1 style='margin:0;'>NTU EEE Career Pathways Platform</h1>
+            <p style='margin:0.3rem 0 0 0;'>Career Exploration Platform for EEE Students | Built in collaboration with Imperial College London</p>
+        </div>
+        {_logo_html}
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 # ========== Backend Loading ==========
 @st.cache_resource(show_spinner=False)
-def _get_platform():
+def _get_platform(_v=2):
     from backend_api import EEECareerPlatform
     platform = EEECareerPlatform()
     platform.load()
@@ -509,7 +619,7 @@ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 let rec,active=false;
 if(!SR){document.getElementById('st').textContent='⚠️ Not supported — use Chrome';document.getElementById('btn').disabled=true;}
 else{
-  rec=new SR();rec.lang='en-SG';rec.continuous=false;rec.interimResults=true;
+  rec=new SR();rec.lang='en-SG';rec.continuous=true;rec.interimResults=true;
   rec.onstart=()=>{active=true;document.getElementById('btn').className='on';
     document.getElementById('btn').textContent='🔴 Listening… click to stop';
     document.getElementById('st').textContent='Speak now…';
@@ -573,37 +683,14 @@ if "chat_history" not in st.session_state:
     ]
 
 with st.sidebar:
-    st.markdown("""
-    <style>
-    section[data-testid="stSidebar"] { background: #f8f9ff; }
-    section[data-testid="stSidebar"] .stChatInput textarea { font-size: 0.88rem; }
-    section[data-testid="stSidebar"] button[kind="secondary"] {
-        border-radius: 20px !important; font-size: 0.78rem !important;
-        padding: 4px 10px !important; border: 1.5px solid #dde !important;
-        background: white !important; color: #444 !important;
-        transition: all 0.15s !important;
-    }
-    section[data-testid="stSidebar"] button[kind="secondary"]:hover {
-        background: #667eea !important; color: white !important; border-color: #667eea !important;
-    }
-    </style>
-    <div style="background:linear-gradient(135deg,#1e3c72 0%,#2a5298 100%);
-                border-radius:12px;padding:10px 14px;margin-bottom:10px;
-                display:flex;align-items:center;gap:10px;
-                box-shadow:0 3px 12px rgba(30,60,114,0.2);">
-      <div style="font-size:22px;line-height:1;">🤖</div>
-      <div>
-        <div style="color:white;font-weight:700;font-size:0.92rem;">EEE Career Advisor</div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("**🤖 EEE Career Advisor**")
 
     is_busy = st.session_state.get("_chat_busy", False)
 
     if is_busy:
         st.markdown("<div style='text-align:center;font-size:0.78rem;color:#999;padding:4px 0;'>⏳ Thinking…</div>", unsafe_allow_html=True)
 
-    components.html(_build_chat_html(st.session_state.chat_history), height=560, scrolling=True)
+    components.html(_build_chat_html(st.session_state.chat_history), height=420, scrolling=True)
 
     user_msg = st.chat_input("Ask about EEE careers…", key="chatbot_input")
     if user_msg and not is_busy:
@@ -635,7 +722,7 @@ with st.sidebar:
             scols = st.columns(len(suggestions))
             for ci, (label, prompt) in enumerate(suggestions):
                 with scols[ci]:
-                    if st.button(label, key=f"sugg_{label}", use_container_width=True):
+                    if st.button(label, key=f"sugg_{label}", width='stretch'):
                         st.session_state["_chat_busy"] = True
                         st.session_state.chat_history.append({"role": "user", "text": prompt})
                         with st.spinner("Thinking…"):
@@ -643,7 +730,7 @@ with st.sidebar:
                         st.session_state["_chat_busy"] = False
                         st.rerun()
 
-    if st.button("🗑️ Clear chat", use_container_width=True):
+    if st.button("🗑️ Clear chat", width='stretch'):
         st.session_state.chat_history = [
             {"role": "bot", "text": "Chat cleared! Ask me anything about EEE careers."}
         ]
@@ -651,88 +738,199 @@ with st.sidebar:
         st.session_state["_chat_job"] = None
         st.rerun()
 
+    if st.button("✕ Close Panel", key="close_sidebar_btn", use_container_width=True):
+        st.session_state["sidebar_visible"] = False
+        st.rerun()
+
 
 # ========== Tabs ==========
-tab1, tab2, tab3, tab5 = st.tabs(["🔍 Explore Jobs", "📄 CV Analysis", "🎤 Mock Interview", "📊 Analytics"])
+tab1, tab2, tab3, tab5, tab_chat, tab_imperial = st.tabs(["🔍 Explore Jobs", "📄 CV Analysis", "🎤 Mock Interview", "📊 Analytics", "💬 AI Chat", "Imperial Platform"])
 
 # ==================== TAB 1: Explore Jobs ====================
 with tab1:
     st.markdown("<h2 class='section-header'>🔍 Explore Career Opportunities</h2>", unsafe_allow_html=True)
-    col1, col2 = st.columns([1, 2])
 
-    with col1:
-        st.markdown("<div class='glass-card'><h4>🏢 Select Industry</h4></div>", unsafe_allow_html=True)
-        sectors = platform.get_sectors()
-        selected_sector = st.selectbox("Sector:", sectors, key="sector",
-                                       label_visibility="collapsed",
-                                       format_func=str.title)
+    _SENIOR_KEYWORDS = {"senior", "lead", "principal", "chief", "head", "manager", "director"}
 
-    if selected_sector:
-        job_titles = platform.get_job_titles(selected_sector)
-        with col2:
-            st.markdown("<div class='glass-card'><h4>🎯 Select Position</h4></div>", unsafe_allow_html=True)
-            selected_job = st.selectbox("Position:", job_titles, key="job",
-                                        label_visibility="collapsed",
-                                        format_func=str.title)
+    def _job_label(title: str) -> str:
+        if any(w in title.lower().split() for w in _SENIOR_KEYWORDS):
+            return f"{title.title()}  〔 Advanced Role 〕"
+        return title.title()
 
-        if selected_job:
-            col_a, col_b = st.columns([3, 2])
+    def _level_badge(level):
+        try:
+            lvl = int(level)
+        except (TypeError, ValueError):
+            return f"<span style='background:#ccc;color:#333;padding:2px 8px;border-radius:12px;font-size:0.75rem;'>Level {level}</span>"
+        if lvl <= 3:
+            return f"<span style='background:#d4edda;color:#155724;padding:2px 8px;border-radius:12px;font-size:0.75rem;'>Level {lvl} · Entry–Intermediate</span>"
+        elif lvl == 4:
+            return f"<span style='background:#fff3cd;color:#856404;padding:2px 8px;border-radius:12px;font-size:0.75rem;'>Level {lvl} · Advanced — build toward this</span>"
+        else:
+            return f"<span style='background:#e2e3e5;color:#383d41;padding:2px 8px;border-radius:12px;font-size:0.75rem;'>Level {lvl} · Expert — long-term goal</span>"
 
-            with col_a:
-                # Salary ranges by sector (Singapore, 2024–2025)
-                _salary_map = {
-                    "semiconductor":    ("S$3,800 – S$5,200", "S$5,500 – S$9,000", "S$9,000 – S$15,000+"),
-                    "ict":              ("S$3,500 – S$4,800", "S$5,000 – S$8,500", "S$8,500 – S$14,000+"),
-                    "power":            ("S$3,600 – S$4,800", "S$5,200 – S$8,000", "S$8,000 – S$13,000+"),
-                    "energy":           ("S$3,600 – S$4,800", "S$5,200 – S$8,000", "S$8,000 – S$13,000+"),
-                    "telecom":          ("S$3,500 – S$4,600", "S$5,000 – S$8,000", "S$8,000 – S$13,000+"),
-                    "communication":    ("S$3,500 – S$4,600", "S$5,000 – S$8,000", "S$8,000 – S$13,000+"),
-                    "defence":          ("S$3,800 – S$5,000", "S$5,500 – S$9,000", "S$9,000 – S$15,000+"),
-                    "aerospace":        ("S$3,800 – S$5,000", "S$5,500 – S$9,000", "S$9,000 – S$15,000+"),
-                    "biomedical":       ("S$3,600 – S$4,800", "S$5,000 – S$8,000", "S$8,000 – S$13,000+"),
-                }
-                _sal_key = next((k for k in _salary_map if k in selected_sector.lower()), None)
-                if _sal_key:
-                    _fresh, _mid, _senior = _salary_map[_sal_key]
-                    st.markdown(f"""<div style='background:linear-gradient(135deg,#e8f5e9,#c8e6c9);border-left:4px solid #4caf50;
-                        border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:12px;'>
-                        <strong style='color:#2e7d32;font-size:0.85rem;'>💰 Salary Benchmarks (Singapore 2025)</strong><br>
-                        <span style='font-size:0.8rem;color:#444;'>
-                        🎓 Fresh grad: <strong>{_fresh}</strong> &nbsp;|&nbsp;
-                        📈 3–5 yrs: <strong>{_mid}</strong> &nbsp;|&nbsp;
-                        🏆 Senior: <strong>{_senior}</strong>
-                        </span></div>""", unsafe_allow_html=True)
+    explore_mode = st.radio(
+        "explore_mode",
+        ["🎯  I know my target role", "📚  Explore from my courses"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="explore_mode",
+    )
 
-                st.markdown("<div class='glass-card'><h4>📖 Job Description</h4></div>", unsafe_allow_html=True)
-                job_desc = platform.get_job_description(selected_sector, selected_job) or ""
-                st.write(job_desc if job_desc else "No description available.")
+    st.markdown("<br>", unsafe_allow_html=True)
 
-                st.markdown("<div class='gradient-card'><h4>🛠️ Skills Summary</h4></div>", unsafe_allow_html=True)
-                tsc_skills = platform.get_raw_tsc_skills(selected_sector, selected_job)
-                if tsc_skills:
-                    with st.expander("View detailed skills", expanded=True):
-                        for s in tsc_skills:
-                            st.markdown(f"**{s['skill']}** — Level {s['level']}")
-                            if s['description']:
-                                st.caption(s['description'])
-                else:
-                    st.info("No technical skills data available for this role — the SkillsFuture source file does not have skills listed for this role.")
+    # ── MODE 2: Course → Jobs ─────────────────────────────────────────────────
+    if explore_mode == "📚  Explore from my courses":
+        st.markdown("<div class='info-box'>Select NTU courses you've taken or are interested in — we'll find the best-matching career roles for you.</div>", unsafe_allow_html=True)
 
-            with col_b:
-                # --- One-click Interview ---
-                # --- Recommended Courses ---
-                st.markdown("<div class='gradient-card-blue'><h4>📚 Recommended Courses</h4></div>", unsafe_allow_html=True)
-                if job_desc:
-                    with st.spinner("Finding courses..."):
-                        try:
-                            courses = platform.get_top_courses(selected_sector, selected_job, top_n=5)
-                        except Exception as e:
-                            courses = []
-                            st.warning(f"Course matching error: {e}")
-                    for i, c in enumerate(courses, 1):
-                        st.markdown(f"<div class='course-card'><strong>{i}. {c['code']}</strong><br>{c['name'].title()}<br><small>Relevance: {c['score']*100:.0f}%</small></div>", unsafe_allow_html=True)
-                else:
-                    st.info("No job description available for course matching.")
+        all_courses = platform.get_all_courses()
+        course_options = {f"{c['code']} — {c['name'].title()}": c["code"] for c in all_courses if c["code"]}
+
+        selected_course_labels = st.multiselect(
+            "Select your courses:",
+            options=list(course_options.keys()),
+            placeholder="Search and select courses…",
+            key="course_explore_select",
+        )
+
+        if selected_course_labels:
+            selected_codes = [course_options[l] for l in selected_course_labels]
+            with st.spinner("Finding matching roles…"):
+                matched_roles = platform.find_jobs_from_courses(selected_codes, top_n=10)
+
+            if not matched_roles:
+                st.info("No matching roles found. Try selecting more courses.")
+            else:
+                st.markdown(f"### 🎯 Top Matching Roles for Your Courses")
+                if "course_explore_selected_role" not in st.session_state:
+                    st.session_state["course_explore_selected_role"] = None
+
+                for rank, role in enumerate(matched_roles, 1):
+                    if rank <= 3:
+                        match_label, match_class, badge_class = "Strong Match", "high-match", "similarity-high"
+                    elif rank <= 7:
+                        match_label, match_class, badge_class = "Good Match", "good-match", "similarity-good"
+                    else:
+                        match_label, match_class, badge_class = "Possible Match", "medium-match", "similarity-medium"
+
+                    st.markdown(f"""
+                    <div class='job-card {match_class}'>
+                        <div style='display:flex;justify-content:space-between;align-items:center;'>
+                            <div>
+                                <h4 style='margin:0;'>{rank}. {str(role['job_title']).title()}</h4>
+                                <p style='margin:0.3rem 0 0 0;color:#666;font-size:0.9rem;'>🏭 {str(role['sector']).title()}</p>
+                            </div>
+                            <div class='similarity-badge {badge_class}'>{match_label}</div>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+
+                    with st.expander("View Details", expanded=False):
+                        sel_sector = role["sector"]
+                        sel_job = role["job_title"]
+                        det_a, det_b = st.columns([3, 2])
+                        with det_a:
+                            job_desc = platform.get_job_description(sel_sector, sel_job) or ""
+                            st.markdown("<div class='glass-card'><h4>📖 Job Description</h4></div>", unsafe_allow_html=True)
+                            st.write(job_desc if job_desc else "No description available.")
+
+                            tsc_skills = platform.get_raw_tsc_skills(sel_sector, sel_job)
+                            if tsc_skills:
+                                st.markdown("<div class='gradient-card'><h4>🛠️ Skills Required</h4></div>", unsafe_allow_html=True)
+                                for s in tsc_skills:
+                                    st.markdown(f"**{s['skill']}** &nbsp; {_level_badge(s['level'])}", unsafe_allow_html=True)
+                                    if s['description']:
+                                        st.caption(s['description'])
+
+                        with det_b:
+                            st.markdown("<div class='gradient-card-blue'><h4>📚 Recommended Courses</h4></div>", unsafe_allow_html=True)
+                            if job_desc:
+                                try:
+                                    det_courses = platform.get_top_courses(sel_sector, sel_job, top_n=5)
+                                except Exception:
+                                    det_courses = []
+                                for i, c in enumerate(det_courses, 1):
+                                    st.markdown(f"<div class='course-card'><strong>{i}. {c['code']}</strong><br>{c['name'].title()}<br><small>Relevance: {c['score']*100:.0f}%</small></div>", unsafe_allow_html=True)
+                            else:
+                                st.info("No job description available for course matching.")
+
+    # ── MODE 1: Role → Details (existing flow) ────────────────────────────────
+    else:
+        col1, col2 = st.columns([1, 2])
+
+        with col1:
+            st.markdown("<div class='glass-card'><h4>🏢 Select Industry</h4></div>", unsafe_allow_html=True)
+            sectors = platform.get_sectors()
+            selected_sector = st.selectbox("Sector:", sectors, key="sector",
+                                           label_visibility="collapsed",
+                                           format_func=str.title)
+
+        if selected_sector:
+            job_titles = platform.get_job_titles(selected_sector)
+            with col2:
+                st.markdown("<div class='glass-card'><h4>🎯 Select Position</h4></div>", unsafe_allow_html=True)
+                selected_job = st.selectbox("Position:", job_titles, key="job",
+                                            label_visibility="collapsed",
+                                            format_func=_job_label)
+
+            if selected_job:
+                if any(w in selected_job.lower().split() for w in _SENIOR_KEYWORDS):
+                    st.info("💡 This is an advanced role — useful for long-term career planning. Most fresh graduates start at junior/associate level.", icon=None)
+                col_a, col_b = st.columns([3, 2])
+
+                with col_a:
+                    # Salary ranges by sector (Singapore, 2024–2025)
+                    _salary_map = {
+                        "semiconductor":    ("S$3,800 – S$5,200", "S$5,500 – S$9,000", "S$9,000 – S$15,000+"),
+                        "ict":              ("S$3,500 – S$4,800", "S$5,000 – S$8,500", "S$8,500 – S$14,000+"),
+                        "power":            ("S$3,600 – S$4,800", "S$5,200 – S$8,000", "S$8,000 – S$13,000+"),
+                        "energy":           ("S$3,600 – S$4,800", "S$5,200 – S$8,000", "S$8,000 – S$13,000+"),
+                        "telecom":          ("S$3,500 – S$4,600", "S$5,000 – S$8,000", "S$8,000 – S$13,000+"),
+                        "communication":    ("S$3,500 – S$4,600", "S$5,000 – S$8,000", "S$8,000 – S$13,000+"),
+                        "defence":          ("S$3,800 – S$5,000", "S$5,500 – S$9,000", "S$9,000 – S$15,000+"),
+                        "aerospace":        ("S$3,800 – S$5,000", "S$5,500 – S$9,000", "S$9,000 – S$15,000+"),
+                        "biomedical":       ("S$3,600 – S$4,800", "S$5,000 – S$8,000", "S$8,000 – S$13,000+"),
+                    }
+                    _sal_key = next((k for k in _salary_map if k in selected_sector.lower()), None)
+                    if _sal_key:
+                        _fresh, _mid, _senior = _salary_map[_sal_key]
+                        st.markdown(f"""<div style='background:linear-gradient(135deg,#e8f5e9,#c8e6c9);border-left:4px solid #4caf50;
+                            border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:12px;'>
+                            <strong style='color:#2e7d32;font-size:0.85rem;'>💰 Salary Benchmarks (Singapore 2025)</strong><br>
+                            <span style='font-size:0.8rem;color:#444;'>
+                            🎓 Fresh grad: <strong>{_fresh}</strong> &nbsp;|&nbsp;
+                            📈 3–5 yrs: <strong>{_mid}</strong> &nbsp;|&nbsp;
+                            🏆 Senior: <strong>{_senior}</strong>
+                            </span></div>""", unsafe_allow_html=True)
+
+                    st.markdown("<div class='glass-card'><h4>📖 Job Description</h4></div>", unsafe_allow_html=True)
+                    job_desc = platform.get_job_description(selected_sector, selected_job) or ""
+                    st.write(job_desc if job_desc else "No description available.")
+
+                    st.markdown("<div class='gradient-card'><h4>🛠️ Skills Summary</h4></div>", unsafe_allow_html=True)
+                    tsc_skills = platform.get_raw_tsc_skills(selected_sector, selected_job)
+                    if tsc_skills:
+                        with st.expander("View detailed skills", expanded=True):
+                            for s in tsc_skills:
+                                st.markdown(f"**{s['skill']}** &nbsp; {_level_badge(s['level'])}", unsafe_allow_html=True)
+                                if s['description']:
+                                    st.caption(s['description'])
+                    else:
+                        st.info("No technical skills data available for this role — the SkillsFuture source file does not have skills listed for this role.")
+
+                with col_b:
+                    # --- Recommended Courses ---
+                    st.markdown("<div class='gradient-card-blue'><h4>📚 Recommended Courses</h4></div>", unsafe_allow_html=True)
+                    if job_desc:
+                        with st.spinner("Finding courses..."):
+                            try:
+                                courses = platform.get_top_courses(selected_sector, selected_job, top_n=5)
+                            except Exception as e:
+                                courses = []
+                                st.warning(f"Course matching error: {e}")
+                        for i, c in enumerate(courses, 1):
+                            st.markdown(f"<div class='course-card'><strong>{i}. {c['code']}</strong><br>{c['name'].title()}<br><small>Relevance: {c['score']*100:.0f}%</small></div>", unsafe_allow_html=True)
+                    else:
+                        st.info("No job description available for course matching.")
 
 
 # ==================== TAB 2: CV Analysis ====================
@@ -757,7 +955,7 @@ with tab2:
                 detected_skills = platform.extract_skills(cv_text)
                 soft_skills_found = detect_soft_skills_from_text(cv_text)
                 try:
-                    matches = platform.find_matching_jobs(detected_skills, top_n=5)
+                    matches = platform.find_matching_jobs(detected_skills, top_n=20)
                     strong = matches.get("strong", [])
                     good   = matches.get("good", [])
                     weak   = matches.get("weak", [])
@@ -805,7 +1003,7 @@ with tab2:
             with radar_col:
                 st.markdown("**🧠 Soft Skills Profile**")
                 fig = build_radar_chart(soft_skills_found)
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
                 detected_dims = [dim for dim, score in soft_skills_found.items() if score > 0]
                 if detected_dims:
                     st.caption("Detected: " + ", ".join(s.title() for s in detected_dims))
@@ -818,22 +1016,32 @@ with tab2:
         st.markdown("<h3 class='section-header'>💼 Top Job Matches</h3>", unsafe_allow_html=True)
         if detected_skills:
 
-            all_jobs = strong + good + weak  # top 5 total, ordered by score desc
+            all_jobs = strong + good + weak
+
+            def _is_intern(job):
+                return "intern" in str(job.get("opportunity_type", "")).lower()
+
+            def _is_fulltime(job):
+                opp = str(job.get("opportunity_type", "")).lower()
+                return "job" in opp or "graduate" in opp
+
+            intern_jobs   = [j for j in all_jobs if _is_intern(j)][:5]
+            fulltime_jobs = [j for j in all_jobs if _is_fulltime(j)][:5]
 
             if not all_jobs:
                 st.info("No matches found. Upload a CV with more technical content.")
             else:
                 def _get_tier(score_pct):
                     if score_pct >= 35:
-                        return "Strong", "high-match", "similarity-high", "🟢"
+                        return "Strong", "high-match", "similarity-high"
                     elif score_pct >= 20:
-                        return "Good", "good-match", "similarity-good", "🔵"
+                        return "Good", "good-match", "similarity-good"
                     else:
-                        return "Possible", "medium-match", "similarity-medium", "🟠"
+                        return "Possible", "medium-match", "similarity-medium"
 
                 def _render_match(idx, job):
                     sim_pct = job.get('score', 0) * 100
-                    label, match_class, badge_class, _ = _get_tier(sim_pct)
+                    label, match_class, badge_class = _get_tier(sim_pct)
                     st.markdown(f"""
                     <div class='job-card {match_class}'>
                         <div style='display:flex;justify-content:space-between;align-items:center;'>
@@ -845,15 +1053,28 @@ with tab2:
                         </div>
                     </div>""", unsafe_allow_html=True)
 
-                for i, job in enumerate(all_jobs, 1):
-                    _render_match(i, job)
+                jm_col1, jm_col2 = st.columns(2)
+                with jm_col1:
+                    st.markdown("##### 🎓 Top Internship Matches")
+                    if intern_jobs:
+                        for i, job in enumerate(intern_jobs, 1):
+                            _render_match(i, job)
+                    else:
+                        st.info("No internship matches found in top results.")
+                with jm_col2:
+                    st.markdown("##### 💼 Top Full-Time / Graduate Matches")
+                    if fulltime_jobs:
+                        for i, job in enumerate(fulltime_jobs, 1):
+                            _render_match(i, job)
+                    else:
+                        st.info("No full-time matches found in top results.")
         else:
             st.info("No job matches found. Upload a CV with more technical content.")
 
         # --- AI CV Feedback ---
         st.markdown("<h3 class='section-header'>🤖 AI CV Feedback</h3>", unsafe_allow_html=True)
         all_jobs_for_feedback = (strong + good + weak) if detected_skills else []
-        if st.button("✨ Get Personalised AI Feedback", type="primary", use_container_width=True):
+        if st.button("✨ Get Personalised AI Feedback", type="primary", width='stretch'):
             with st.spinner("Analysing your CV with AI…"):
                 feedback = _get_cv_ai_feedback(cv_text, detected_skills, all_jobs_for_feedback)
             st.session_state["_cv_ai_feedback"] = feedback
@@ -890,7 +1111,7 @@ with tab2:
         )
         iv_c1, iv_c2 = st.columns(2)
         with iv_c1:
-            if st.button("🧠 Behavioural Interview", use_container_width=True):
+            if st.button("🧠 Behavioural Interview", width='stretch'):
                 for k in ("iv_mode","iv_history","iv_report","iv_busy","iv_started","iv_chat","iv_client"):
                     st.session_state.pop(k, None)
                 st.session_state.iv_mode = "active"
@@ -901,7 +1122,7 @@ with tab2:
                 st.session_state.iv_busy = False
                 st.info("✅ Behavioural interview ready. Go to the **🎤 Mock Interview** tab to begin!")
         with iv_c2:
-            if st.button(f"⚙️ Technical: {_cv_guessed_topic}", use_container_width=True):
+            if st.button(f"⚙️ Technical: {_cv_guessed_topic}", width='stretch'):
                 for k in ("iv_mode","iv_history","iv_report","iv_busy","iv_started","iv_chat","iv_client"):
                     st.session_state.pop(k, None)
                 st.session_state.iv_mode = "active"
@@ -971,7 +1192,7 @@ with tab3:
                 else:
                     st.warning("⚠️ Upload your CV in the **CV Analysis** tab first.")
 
-        if st.button("🚀 Start Interview", type="primary", use_container_width=True):
+        if st.button("🚀 Start Interview", type="primary", width='stretch'):
             if "CV Deep Dive" in iv_type_sel and not st.session_state.get("_cv_text"):
                 st.error("Please upload your CV in the CV Analysis tab first.")
             else:
@@ -1027,8 +1248,8 @@ with tab3:
 
         ba, bb = st.columns(2)
         with ba:
-            if st.button("📨 Submit Answer", type="primary", use_container_width=True,
-                         disabled=st.session_state.iv_busy or not answer.strip()):
+            if st.button("📨 Submit Answer", type="primary", width='stretch',
+                         disabled=st.session_state.iv_busy):
                 st.session_state.iv_busy = True
                 st.session_state.iv_history.append({"role": "student", "text": answer.strip()})
                 with st.spinner("Interviewer is responding…"):
@@ -1047,7 +1268,7 @@ with tab3:
                     st.session_state.iv_mode = "done"
                 st.rerun()
         with bb:
-            if st.button("🏁 End & Get Report", use_container_width=True, disabled=st.session_state.iv_busy):
+            if st.button("🏁 End & Get Report", width='stretch', disabled=st.session_state.iv_busy):
                 st.session_state.iv_busy = True
                 with st.spinner("Generating your report…"):
                     report = _iv_call(
@@ -1077,7 +1298,7 @@ with tab3:
         else:
             st.info("No report generated.")
 
-        if st.button("🔄 Start New Interview", type="primary", use_container_width=True):
+        if st.button("🔄 Start New Interview", type="primary", width='stretch'):
             for k in ("iv_mode","iv_history","iv_report","iv_busy","iv_started","iv_type","iv_topic","iv_chat","iv_client"):
                 st.session_state.pop(k, None)
             st.rerun()
@@ -1122,36 +1343,46 @@ with tab5:
         fig_ind.update_layout(
             margin=dict(t=10, b=10, l=10, r=60), height=360,
             xaxis=dict(showgrid=False, visible=False),
-            yaxis=dict(tickfont=dict(size=12)),
+            yaxis=dict(tickfont=dict(size=12, color="#000000")),
+            font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_ind, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_ind, width='stretch', config={"displayModeBar": False})
+        st.caption("📌 Source: CareerAxis job postings — includes all degree backgrounds, not filtered to EEE-specific roles")
 
-    with r1c2:
-        st.markdown("#### 🎯 Opportunity Types")
-        opp_raw = _ca["Opportunity type(s)"].dropna()
-        # Flatten multi-label entries by splitting on ";"
-        opp_counts = collections.Counter()
-        for entry in opp_raw:
-            for part in str(entry).split(";"):
-                label = part.strip()
-                if label:
-                    opp_counts[label] += 1
-        top_opp = dict(sorted(opp_counts.items(), key=lambda x: -x[1])[:6])
-        fig_opp = go.Figure(go.Pie(
-            labels=list(top_opp.keys()),
-            values=list(top_opp.values()),
-            hole=0.5,
-            marker=dict(colors=PALETTE[:len(top_opp)]),
-            textinfo="percent",
-            hovertemplate="%{label}<br>%{value} postings<extra></extra>",
+    # ── Row 1b: Internship vs Full-Time top industries ────────────────────────
+    st.markdown("#### 🎯 Top Industries by Opportunity Type")
+    opp_col = _ca["Opportunity type(s)"].fillna("").str.lower()
+    intern_df  = _ca[opp_col.str.contains("intern")]
+    fulltime_df = _ca[opp_col.str.contains("job|graduate")]
+
+    ib1, ib2 = st.columns(2)
+
+    def _opp_bar(df, title, color):
+        ind = df["Industry"].value_counts().head(5)
+        fig = go.Figure(go.Bar(
+            x=ind.values[::-1], y=ind.index[::-1],
+            orientation="h",
+            marker=dict(color=color),
+            text=ind.values[::-1], textposition="outside",
         ))
-        fig_opp.update_layout(
-            margin=dict(t=10, b=10, l=10, r=10), height=360,
-            legend=dict(font=dict(size=10), orientation="v"),
-            paper_bgcolor="rgba(0,0,0,0)",
+        fig.update_layout(
+            title=dict(text=title, font=dict(size=13, color="#000000")),
+            margin=dict(t=40, b=10, l=10, r=50), height=280,
+            xaxis=dict(showgrid=False, visible=False),
+            yaxis=dict(tickfont=dict(size=11, color="#000000")),
+            font=dict(color="#000000"),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_opp, use_container_width=True, config={"displayModeBar": False})
+        return fig
+
+    with ib1:
+        st.plotly_chart(_opp_bar(intern_df, "🎓 Top 5 Industries — Internships", "#11998e"),
+                        width='stretch', config={"displayModeBar": False})
+    with ib2:
+        st.plotly_chart(_opp_bar(fulltime_df, "💼 Top 5 Industries — Full-Time / Graduate", "#2a5298"),
+                        width='stretch', config={"displayModeBar": False})
+    st.caption("📌 Source: CareerAxis job postings — not NTU placement data")
 
     # ── Row 2: SkillsFuture sunburst  +  Taxonomy skill clusters ──────────────
     r2c1, r2c2 = st.columns([2, 3])
@@ -1175,9 +1406,10 @@ with tab5:
         ))
         fig_sun.update_layout(
             margin=dict(t=10, b=10, l=10, r=10), height=380,
+            font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_sun, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_sun, width='stretch', config={"displayModeBar": False})
 
     with r2c2:
         st.markdown("#### 🧩 Skill Taxonomy: Top Clusters")
@@ -1195,10 +1427,11 @@ with tab5:
         fig_clust.update_layout(
             margin=dict(t=10, b=10, l=10, r=80), height=380,
             xaxis=dict(showgrid=False, visible=False),
-            yaxis=dict(tickfont=dict(size=11)),
+            yaxis=dict(tickfont=dict(size=11, color="#000000")),
+            font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_clust, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_clust, width='stretch', config={"displayModeBar": False})
 
     # ── Row 3: Course catalog breakdown  +  Contract type donut ──────────────
     r3c1, r3c2 = st.columns([2, 3])
@@ -1221,9 +1454,10 @@ with tab5:
         fig_dom.update_layout(
             margin=dict(t=10, b=10, l=10, r=10), height=300,
             showlegend=False,
+            font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_dom, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_dom, width='stretch', config={"displayModeBar": False})
 
     with r3c2:
         st.markdown("#### 🔗 Taxonomy Skill Clusters → Sector Presence")
@@ -1251,11 +1485,254 @@ with tab5:
         ))
         fig_heat.update_layout(
             margin=dict(t=10, b=80, l=10, r=10), height=300,
-            xaxis=dict(tickangle=-30, tickfont=dict(size=10)),
-            yaxis=dict(tickfont=dict(size=10)),
+            xaxis=dict(tickangle=-30, tickfont=dict(size=10, color="#000000")),
+            yaxis=dict(tickfont=dict(size=10, color="#000000")),
+            font=dict(color="#000000"),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig_heat, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_heat, width='stretch', config={"displayModeBar": False})
+
+# ==================== TAB: AI Chat ====================
+with tab_chat:
+    st.markdown("<h2 class='section-header'>💬 AI Career Advisor</h2>", unsafe_allow_html=True)
+    if st.session_state["sidebar_visible"]:
+        st.markdown("<div class='success-box'>✅ Chat panel is open on the left — ask anything!</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class='glass-card' style='text-align:center;padding:2.5rem;'>
+            <h3>🤖 Your AI Career Advisor is ready</h3>
+            <p>Get personalised advice on EEE careers, salaries, skills, internships, NTU courses and more.</p>
+        </div>""", unsafe_allow_html=True)
+        col_l, col_m, col_r = st.columns([1, 2, 1])
+        with col_m:
+            if st.button("💬 Open Chat Panel", type="primary", use_container_width=True, key="open_chat_from_tab"):
+                st.session_state["sidebar_visible"] = True
+                st.rerun()
+
+# ==================== TAB: Imperial Platform ====================
+with tab_imperial:
+    st.markdown("<h2 class='section-header' style='display:block;margin-bottom:1.5rem;'>Imperial College London Platform</h2>", unsafe_allow_html=True)
+
+    # ── Collaboration Banner ──────────────────────────────────────────────────
+    _imp_logo_html = (
+        f"<img src='data:image/png;base64,{_imp_logo_b64}' "
+        f"style='height:56px;border-radius:8px;background:white;padding:6px 12px;flex-shrink:0;'>"
+        if _imp_logo_b64 else
+        "<div style='background:white;border-radius:8px;padding:10px 18px;"
+        "font-weight:700;color:#003E74;font-size:0.9rem;'>Imperial EEE</div>"
+    )
+    _ntu_badge_html = (
+        f"<img src='data:image/png;base64,{_logo_b64}' "
+        f"style='height:56px;border-radius:8px;background:white;padding:6px 12px;flex-shrink:0;'>"
+        if _logo_b64 else
+        "<div style='background:white;border-radius:8px;padding:10px 18px;"
+        "font-weight:700;color:#1e3c72;font-size:0.9rem;'>NTU EEE</div>"
+    )
+    st.markdown(f"""
+    <div style='background:linear-gradient(135deg,#003E74 0%,#006EAF 55%,#1e3c72 100%);
+                border-radius:1.2rem;padding:2rem 2.5rem;margin-bottom:2rem;
+                box-shadow:0 10px 40px rgba(0,0,0,0.18);'>
+        <div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;'>
+            <div style='flex:1;min-width:240px;'>
+                <h2 style='color:white;margin:0;font-size:1.75rem;font-weight:700;'>
+                    NTU x Imperial EEE Career Platforms
+                </h2>
+                <p style='color:rgba(255,255,255,0.88);margin:0.6rem 0 0 0;font-size:0.97rem;line-height:1.6;'>
+                    A cross-university collaboration between Nanyang Technological University Singapore and
+                    Imperial College London — two world-leading engineering schools exploring how AI can guide
+                    EEE students toward meaningful career exploration, from Singapore's technology ecosystem to
+                    London's global engineering and financial hub.
+                </p>
+            </div>
+            <div style='display:flex;gap:1rem;align-items:center;flex-shrink:0;'>
+                {_ntu_badge_html}
+                <div style='color:white;font-size:1.4rem;font-weight:600;'>x</div>
+                {_imp_logo_html}
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── How Imperial's Platform Works ────────────────────────────────────────
+    st.markdown("<h3 class='section-header' style='display:block;margin-bottom:1.5rem;'>How the Imperial Platform Works</h3>", unsafe_allow_html=True)
+    st.markdown("""
+    <p style='color:#555;margin-bottom:1.2rem;'>
+        The Imperial platform is built around a <strong>goal-first input flow</strong>. Students upload their CV
+        and set a career goal — either from a dropdown or in free text — then an Azure AI agent processes
+        both and generates personalised outputs across four tabs.
+    </p>
+    <div style='display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem;'>
+        <div style='background:linear-gradient(135deg,#003E74,#006EAF);color:white;
+                    border-radius:1rem;padding:1.3rem;text-align:center;'>
+            <div style='font-weight:700;font-size:1rem;margin-bottom:0.5rem;'>Step 1</div>
+            <div style='font-size:0.95rem;opacity:0.92;'>Upload your CV</div>
+        </div>
+        <div style='background:linear-gradient(135deg,#006EAF,#0087C8);color:white;
+                    border-radius:1rem;padding:1.3rem;text-align:center;'>
+            <div style='font-weight:700;font-size:1rem;margin-bottom:0.5rem;'>Step 2</div>
+            <div style='font-size:0.95rem;opacity:0.92;'>Set a career goal — dropdown or free text</div>
+        </div>
+        <div style='background:linear-gradient(135deg,#667eea,#764ba2);color:white;
+                    border-radius:1rem;padding:1.3rem;text-align:center;'>
+            <div style='font-weight:700;font-size:1rem;margin-bottom:0.5rem;'>Step 3</div>
+            <div style='font-size:0.95rem;opacity:0.92;'>Azure AI agent analyses CV + goal together</div>
+        </div>
+        <div style='background:linear-gradient(135deg,#11998e,#38ef7d);color:#1a1a2e;
+                    border-radius:1rem;padding:1.3rem;text-align:center;'>
+            <div style='font-weight:700;font-size:1rem;margin-bottom:0.5rem;'>Step 4</div>
+            <div style='font-size:0.95rem;'>4 personalised tabs unlock</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── 4 Output Tabs ────────────────────────────────────────────────────────
+    st.markdown("<p style='font-weight:600;font-size:1rem;color:#1a1a2e;margin-bottom:0.8rem;'>The 4 Personalised Output Tabs</p>", unsafe_allow_html=True)
+    _imp_output_tabs = [
+        ("My Profile",    "#003E74", "Relevant modules + skills extracted from the CV, mapped to the stated career goal"),
+        ("My Roadmap",    "#006EAF", "Recommended modules, future experiences (ML internships, UROP, projects), and skills to develop"),
+        ("Job Match",     "#1e3c72", "Sector fit analysis, CV vs market comparison, and optional match against a specific job posting"),
+        ("Interview Prep","#764ba2", "AI-powered mock interview practice aligned to the stated career goal"),
+    ]
+    _out_cols = st.columns(4)
+    for col, (title, colour, desc) in zip(_out_cols, _imp_output_tabs):
+        with col:
+            st.markdown(f"""
+            <div style='background:white;border-radius:1rem;padding:1rem 0.8rem;text-align:center;
+                        box-shadow:0 4px 15px rgba(0,0,0,0.08);border-top:4px solid {colour};
+                        min-height:140px;'>
+                <div style='font-weight:700;font-size:0.85rem;color:{colour};margin-bottom:0.5rem;'>{title}</div>
+                <div style='font-size:0.8rem;color:#555;line-height:1.4;'>{desc}</div>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Side-by-side Comparison ──────────────────────────────────────────────
+    st.markdown("<h3 class='section-header' style='display:block;margin-bottom:1.5rem;'>Platform Comparison</h3>", unsafe_allow_html=True)
+
+    _ntu_feats = [
+        "Free-browse job explorer — by sector, role, or your courses",
+        "CV upload: skills extraction, job matching, soft-skills radar",
+        "Singapore salary benchmarks per sector (2025)",
+        "Mock interview: Behavioural, Technical, CV Deep Dive",
+        "SkillsFuture + Skill Taxonomy + CareerAxis market analytics",
+        "Always-on AI career advisor chatbot in sidebar",
+        "Groq / Llama 3.3-70B for all AI features",
+        "Singapore job market and SkillsFuture TSC framework",
+        "Course to Jobs: discover roles from NTU modules you have taken",
+        "No login required — explore freely at any stage",
+    ]
+    _imp_feats = [
+        "Goal-first flow — CV + career goal unlock everything at once",
+        "My Profile: relevant modules + skills mapped to your goal",
+        "Personalised roadmap: modules, UROP, internship suggestions",
+        "Job Match: sector fit + CV vs market + specific posting match",
+        "Interview prep aligned to your stated career goal",
+        "Azure AI agent for holistic, goal-aware analysis",
+        "UK / London job market context",
+        "Imperial EEE module catalog as the course backbone",
+        "CV + goal submitted once — all tabs personalised together",
+    ]
+
+    _ntu_rows = "".join(
+        f"<div style='background:rgba(255,255,255,0.13);border-radius:0.5rem;"
+        f"padding:0.5rem 0.8rem;font-size:0.83rem;margin-bottom:0.4rem;'>{f}</div>"
+        for f in _ntu_feats
+    )
+    _imp_rows = "".join(
+        f"<div style='background:rgba(255,255,255,0.13);border-radius:0.5rem;"
+        f"padding:0.5rem 0.8rem;font-size:0.83rem;margin-bottom:0.4rem;'>{f}</div>"
+        for f in _imp_feats
+    )
+
+    cmp_l, cmp_r = st.columns(2)
+    with cmp_l:
+        st.markdown(f"""
+        <div style='background:linear-gradient(135deg,#1e3c72,#2a5298);color:white;
+                    border-radius:1.2rem;padding:1.5rem;'>
+            <h3 style='color:white;margin:0 0 1rem 0;'>NTU EEE Platform</h3>
+            {_ntu_rows}
+        </div>""", unsafe_allow_html=True)
+    with cmp_r:
+        st.markdown(f"""
+        <div style='background:linear-gradient(135deg,#003E74,#006EAF);color:white;
+                    border-radius:1.2rem;padding:1.5rem;'>
+            <h3 style='color:white;margin:0 0 1rem 0;'>Imperial EEE Platform</h3>
+            {_imp_rows}
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Shared Design Philosophy ─────────────────────────────────────────────
+    st.markdown("<h3 class='section-header' style='display:block;margin-bottom:1.5rem;'>Shared Design Philosophy</h3>", unsafe_allow_html=True)
+
+    _phil = [
+        ("EEE-First Design",
+         "Built specifically for Electrical & Electronic Engineering students, not repurposed generic "
+         "career tools. Course catalogs, sector data, AI system prompts, and job matching logic are "
+         "all EEE-tailored from the ground up."),
+        ("AI-Powered Personalisation",
+         "Both platforms use large language models to go beyond keyword matching — providing "
+         "contextual, actionable guidance. NTU uses Groq/Llama for real-time advice; "
+         "Imperial uses Azure AI for holistic goal-driven analysis."),
+        ("Local Context, Shared Method",
+         "The methodology is intentionally mirrored so findings are comparable. NTU targets "
+         "Singapore's semiconductor, ICT, and defence sectors; Imperial targets UK engineering "
+         "and finance. Same framework, different labour markets."),
+    ]
+    ph_cols = st.columns(3)
+    for col, (title, desc) in zip(ph_cols, _phil):
+        with col:
+            st.markdown(f"""
+            <div class='glass-card' style='text-align:center;height:100%;'>
+                <h4 style='color:#003E74;margin:0 0 0.5rem 0;font-size:0.9rem;'>{title}</h4>
+                <p style='font-size:0.8rem;color:#555;line-height:1.5;margin:0;'>{desc}</p>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Key Differences at a Glance ──────────────────────────────────────────
+    st.markdown("<h3 class='section-header' style='display:block;margin-bottom:1.5rem;'>Key Differences at a Glance</h3>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style='display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem;'>
+        <div class='info-box'>
+            <strong>Entry point</strong><br>
+            <span style='font-size:0.85rem;'>
+            This platform lets you explore freely — browse jobs, view analytics, or upload a CV at any time.<br><br>
+            The Imperial platform takes a CV + goal upfront and personalises all four output tabs in one pass.
+            </span>
+        </div>
+        <div class='info-box'>
+            <strong>AI architecture</strong><br>
+            <span style='font-size:0.85rem;'>
+            NTU uses a conversational LLM (Llama 3.3) in a sidebar chatbot plus per-feature calls for CV feedback and interviews.<br><br>
+            Imperial uses a single Azure AI agent that processes CV + goal together and drives all four output tabs.
+            </span>
+        </div>
+        <div class='info-box'>
+            <strong>Career roadmap</strong><br>
+            <span style='font-size:0.85rem;'>
+            NTU maps courses to roles and roles to required skills — students navigate at their own pace.<br><br>
+            Imperial generates a structured roadmap covering recommended modules, suggested experiences (UROP, internships), and a skills development plan.
+            </span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── CTA ──────────────────────────────────────────────────────────────────
+    st.markdown("<br>", unsafe_allow_html=True)
+    _cta_l, _cta_m, _cta_r = st.columns([1, 2, 1])
+    with _cta_m:
+        st.markdown("""
+        <div style='text-align:center;'>
+            <a href='https://imperialntucareers.streamlit.app/' target='_blank'
+               style='display:block;background:#003E74;color:white;padding:0.8rem 1.5rem;
+                      border-radius:0.6rem;font-weight:600;font-size:1rem;text-decoration:none;
+                      box-shadow:0 4px 15px rgba(0,62,116,0.35);'>
+                Open Imperial EEE Platform
+            </a>
+        </div>
+        """, unsafe_allow_html=True)
+
 
 # Footer
-st.markdown("""<div class='footer'><h3>🎓 EEE Career Pathways Platform</h3><p>NTU Singapore • 2026</p></div>""", unsafe_allow_html=True)
+st.markdown("""<div class='footer'><h3>🎓 NTU EEE Career Pathways Platform</h3><p>NTU Singapore • 2026</p></div>""", unsafe_allow_html=True)

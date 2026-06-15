@@ -220,6 +220,8 @@ class EEECareerPlatform:
         self._posting_req_mat = None     # sparse matrix: postings × terms (req only)
         self._posting_full_vec: Optional[TfidfVectorizer] = None
         self._posting_full_mat = None    # sparse matrix: postings × terms (full)
+        self._sf_vec: Optional[TfidfVectorizer] = None
+        self._sf_mat = None              # sparse matrix: SF jobs × terms
         self._loaded = False
 
     # ── Initialization ─────────────────────────────────────────────────────────
@@ -235,8 +237,9 @@ class EEECareerPlatform:
         self._load_dataframes()
         print("[2/4] Fitting TF-IDF on NTU courses…", flush=True)
         self._fit_course_tfidf()
-        print("[3/4] Fitting TF-IDF on CareerAxis postings…", flush=True)
+        print("[3/4] Fitting TF-IDF on CareerAxis postings & SkillsFuture jobs…", flush=True)
         self._fit_posting_tfidf()
+        self._fit_sf_tfidf()
         print("[4/4] Loading spaCy NLP model…", flush=True)
         self._load_nlp()
         self._loaded = True
@@ -263,6 +266,13 @@ class EEECareerPlatform:
             max_features=20000, ngram_range=(1, 2), stop_words="english"
         )
         self._posting_full_mat = self._posting_full_vec.fit_transform(full_texts)
+
+    def _fit_sf_tfidf(self) -> None:
+        texts = self._skillsfuture["Job Description"].fillna("").tolist()
+        self._sf_vec = TfidfVectorizer(
+            max_features=10000, ngram_range=(1, 2), stop_words="english"
+        )
+        self._sf_mat = self._sf_vec.fit_transform(texts)
 
     def _load_dataframes(self) -> None:
         for path in (_SKILLSFUTURE, _COURSES, _CAREERAXIS, _TAXONOMY):
@@ -333,6 +343,43 @@ class EEECareerPlatform:
             return None
         desc = _safe(row.get("Job Description"))
         return desc if desc else None
+
+    def get_all_courses(self) -> List[Dict]:
+        self._assert_loaded()
+        return [
+            {
+                "code": _safe(row.get("Course Code")),
+                "name": _safe(row["Course Name"]),
+            }
+            for _, row in self._courses.iterrows()
+        ]
+
+    def find_jobs_from_courses(self, course_codes: List[str], top_n: int = 10) -> List[Dict]:
+        self._assert_loaded()
+        mask = self._courses["Course Code"].isin(course_codes)
+        selected = self._courses[mask]
+        if selected.empty:
+            return []
+        query = " ".join(selected["Course Description"].fillna("").tolist())
+        if not query.strip():
+            return []
+        q_vec = self._sf_vec.transform([query])
+        sims = cosine_similarity(q_vec, self._sf_mat)[0]
+        top_idxs = sims.argsort()[-top_n:][::-1]
+        seen = set()
+        results = []
+        for i in top_idxs:
+            row = self._skillsfuture.iloc[i]
+            key = (str(row.get("Sector", "")), str(row.get("Job Title", "")))
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append({
+                "sector": _safe(row.get("Sector")),
+                "job_title": _safe(row.get("Job Title")),
+                "score": float(sims[i]),
+            })
+        return results
 
     def get_top_courses(
         self, sector: str, job_title: str, top_n: int = 5
