@@ -127,10 +127,10 @@ section[data-testid="stSidebar"] button[kind="secondary"]:hover {
 .footer { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 2rem; border-radius: 2rem 2rem 0 0; margin-top: 3rem; text-align: center; }
 
 /* Pill toggle for Tab 1 mode switch */
-div[data-testid="stRadio"] { display: flex; justify-content: center; width: 100vw !important; margin-left: calc(-50vw + 50%) !important; }
+div[data-testid="stRadio"] { display: flex !important; justify-content: center !important; width: 100% !important; margin: 0 !important; }
 div[data-testid="stRadio"] > div {
     display: flex; gap: 0; background: #e4e8ec; border-radius: 2rem;
-    padding: 4px; width: 100%;
+    padding: 4px; width: 100% !important;
 }
 div[data-testid="stRadio"] > div > label {
     flex: 1; text-align: center; padding: 0.6rem 1.4rem; border-radius: 2rem; cursor: pointer;
