@@ -127,15 +127,24 @@ section[data-testid="stSidebar"] button[kind="secondary"]:hover {
 .footer { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 2rem; border-radius: 2rem 2rem 0 0; margin-top: 3rem; text-align: center; }
 
 /* Pill toggle for Tab 1 mode switch */
-div[data-testid="stRadio"] > div { display: flex; gap: 0; background: #e4e8ec; border-radius: 2rem; padding: 4px; width: fit-content; }
+div[data-testid="stRadio"] { display: flex; justify-content: center; width: 100%; }
+div[data-testid="stRadio"] > div {
+    display: flex; gap: 0; background: #e4e8ec; border-radius: 2rem;
+    padding: 4px; width: 80%; max-width: 700px;
+}
 div[data-testid="stRadio"] > div > label {
-    padding: 0.5rem 1.4rem; border-radius: 2rem; cursor: pointer;
-    font-weight: 600; font-size: 0.9rem; color: #1a1a2e !important;
-    transition: background 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+    flex: 1; text-align: center; padding: 0.6rem 1.4rem; border-radius: 2rem; cursor: pointer;
+    font-weight: 600; font-size: 0.95rem; color: #1a1a2e !important;
+    transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 div[data-testid="stRadio"] > div > label:has(input:checked) {
     background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-    color: white !important; box-shadow: 0 2px 8px rgba(30,60,114,0.3);
+    box-shadow: 0 2px 8px rgba(30,60,114,0.3);
+}
+div[data-testid="stRadio"] > div > label:has(input:checked) p,
+div[data-testid="stRadio"] > div > label:has(input:checked) span,
+div[data-testid="stRadio"] > div > label:has(input:checked) div {
+    color: white !important;
 }
 div[data-testid="stRadio"] > div > label input { display: none; }
 </style>
@@ -168,7 +177,7 @@ st.markdown("""
 
 # ========== Backend Loading ==========
 @st.cache_resource(show_spinner=False)
-def _get_platform():
+def _get_platform(_v=2):
     from backend_api import EEECareerPlatform
     platform = EEECareerPlatform()
     platform.load()
