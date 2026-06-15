@@ -16,6 +16,8 @@ import streamlit as st
 import re
 import sys
 import collections
+import base64
+from pathlib import Path
 import plotly.graph_objects as go
 import streamlit.components.v1 as components
 
@@ -172,11 +174,17 @@ else:
     </style>""", unsafe_allow_html=True)
 
 # ========== Header ==========
-st.markdown("""
+_logo_path = Path(__file__).parent / "ntu_eee_logo.png"
+_logo_b64 = base64.b64encode(_logo_path.read_bytes()).decode() if _logo_path.exists() else ""
+st.markdown(f"""
 <div class='main-header'>
-    <h1>🎓 NTU EEE Career Pathways Platform</h1>
-    <p>Career Exploration Platform for EEE Students | Built in collaboration with Imperial College London</p>
-
+    <div style='display:flex;align-items:center;gap:20px;flex-wrap:wrap;'>
+        {"<img src='data:image/png;base64," + _logo_b64 + "' style='height:64px;border-radius:10px;background:white;padding:6px 10px;'>" if _logo_b64 else ""}
+        <div>
+            <h1 style='margin:0;'>🎓 NTU EEE Career Pathways Platform</h1>
+            <p style='margin:0.3rem 0 0 0;'>Career Exploration Platform for EEE Students | Built in collaboration with Imperial College London</p>
+        </div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
