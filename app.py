@@ -127,7 +127,7 @@ section[data-testid="stSidebar"] button[kind="secondary"]:hover {
 .footer { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 2rem; border-radius: 2rem 2rem 0 0; margin-top: 3rem; text-align: center; }
 
 /* Pill toggle for Tab 1 mode switch */
-div[data-testid="stRadio"] { display: flex; justify-content: center; width: 100%; }
+div[data-testid="stRadio"] { display: flex; justify-content: center; width: 100vw !important; margin-left: calc(-50vw + 50%) !important; }
 div[data-testid="stRadio"] > div {
     display: flex; gap: 0; background: #e4e8ec; border-radius: 2rem;
     padding: 4px; width: 100%;
@@ -778,10 +778,9 @@ with tab1:
                     st.session_state["course_explore_selected_role"] = None
 
                 for rank, role in enumerate(matched_roles, 1):
-                    score = role["score"]
-                    if score >= 0.05:
+                    if rank <= 3:
                         match_label, match_class, badge_class = "Strong Match", "high-match", "similarity-high"
-                    elif score >= 0.02:
+                    elif rank <= 7:
                         match_label, match_class, badge_class = "Good Match", "good-match", "similarity-good"
                     else:
                         match_label, match_class, badge_class = "Possible Match", "medium-match", "similarity-medium"
