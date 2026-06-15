@@ -174,14 +174,18 @@ else:
     </style>""", unsafe_allow_html=True)
 
 # ========== Header ==========
-st.markdown("""
+_logo_path = Path(__file__).parent / "ntu_eee_logo.png"
+_logo_b64 = base64.b64encode(_logo_path.read_bytes()).decode() if _logo_path.exists() else ""
+_logo_html = f"<img src='data:image/png;base64,{_logo_b64}' style='height:64px;border-radius:10px;background:white;padding:6px 10px;flex-shrink:0;'>" if _logo_b64 else ""
+
+st.markdown(f"""
 <div class='main-header'>
     <div style='display:flex;align-items:center;justify-content:space-between;'>
         <div>
-            <h1 style='margin:0;'> NTU EEE Career Pathways Platform</h1>
+            <h1 style='margin:0;'>🎓 NTU EEE Career Pathways Platform</h1>
             <p style='margin:0.3rem 0 0 0;'>Career Exploration Platform for EEE Students | Built in collaboration with Imperial College London</p>
         </div>
-        {"<img src='data:image/png;base64," + _logo_b64 + "' style='height:64px;border-radius:10px;background:white;padding:6px 10px;flex-shrink:0;'>" if _logo_b64 else ""}
+        {_logo_html}
     </div>
 </div>
 """, unsafe_allow_html=True)
