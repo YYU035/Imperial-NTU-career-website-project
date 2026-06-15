@@ -182,7 +182,7 @@ st.markdown(f"""
 <div class='main-header'>
     <div style='display:flex;align-items:center;justify-content:space-between;'>
         <div>
-            <h1 style='margin:0;'>🎓 NTU EEE Career Pathways Platform</h1>
+            <h1 style='margin:0;'>NTU EEE Career Pathways Platform</h1>
             <p style='margin:0.3rem 0 0 0;'>Career Exploration Platform for EEE Students | Built in collaboration with Imperial College London</p>
         </div>
         {_logo_html}
@@ -738,7 +738,7 @@ with tab1:
 
     def _job_label(title: str) -> str:
         if any(w in title.lower().split() for w in _SENIOR_KEYWORDS):
-            return f"{title.title()}  · Advanced Role"
+            return f"{title.title()}  〔 Advanced Role 〕"
         return title.title()
 
     def _level_badge(level):
