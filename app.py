@@ -147,9 +147,11 @@ div[data-testid="stRadio"] > div > label:has(input:checked) div {
     color: white !important;
 }
 div[data-testid="stRadio"] > div > label input { display: none; }
-/* View details button in course explore mode */
-button[kind="secondary"] { background: #1e3c72 !important; color: white !important; border: none !important; }
-button[kind="secondary"] p { color: white !important; }
+/* Expander content — white background, dark text */
+[data-testid="stExpander"] { background: white !important; border-radius: 0.5rem; }
+[data-testid="stExpander"] details { background: white !important; }
+[data-testid="stExpander"] summary { color: #1a1a2e !important; font-weight: 600; }
+[data-testid="stExpander"] div[data-testid="stExpanderDetails"] { background: white !important; color: #1a1a2e !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -785,8 +787,18 @@ with tab1:
                     else:
                         match_label, match_class, badge_class = "Possible Match", "medium-match", "similarity-medium"
 
-                    label = f"{rank}. {str(role['job_title']).title()}  ·  {str(role['sector']).title()}  [{match_label}]"
-                    with st.expander(label, expanded=False):
+                    st.markdown(f"""
+                    <div class='job-card {match_class}'>
+                        <div style='display:flex;justify-content:space-between;align-items:center;'>
+                            <div>
+                                <h4 style='margin:0;'>{rank}. {str(role['job_title']).title()}</h4>
+                                <p style='margin:0.3rem 0 0 0;color:#666;font-size:0.9rem;'>🏭 {str(role['sector']).title()}</p>
+                            </div>
+                            <div class='similarity-badge {badge_class}'>{match_label}</div>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+
+                    with st.expander("📋 View Details", expanded=False):
                         sel_sector = role["sector"]
                         sel_job = role["job_title"]
                         det_a, det_b = st.columns([3, 2])
