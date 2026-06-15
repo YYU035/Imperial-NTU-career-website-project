@@ -784,59 +784,36 @@ with tab1:
                         match_label, match_class, badge_class = "Good Match", "good-match", "similarity-good"
                     else:
                         match_label, match_class, badge_class = "Possible Match", "medium-match", "similarity-medium"
-                    role_key = f"{role['sector']}||{role['job_title']}"
-                    is_selected = st.session_state["course_explore_selected_role"] == role_key
 
-                    col_r, col_btn = st.columns([5, 1])
-                    with col_r:
-                        st.markdown(f"""
-                        <div class='job-card {match_class}'>
-                            <div style='display:flex;justify-content:space-between;align-items:center;'>
-                                <div>
-                                    <h4 style='margin:0;'>{rank}. {str(role['job_title']).title()}</h4>
-                                    <p style='margin:0.3rem 0 0 0;color:#666;font-size:0.9rem;'>🏭 {str(role['sector']).title()}</p>
-                                </div>
-                                <div class='similarity-badge {badge_class}'>{match_label}</div>
-                            </div>
-                        </div>""", unsafe_allow_html=True)
-                    with col_btn:
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        if st.button("View details", key=f"role_btn_{rank}"):
-                            st.session_state["course_explore_selected_role"] = None if is_selected else role_key
+                    label = f"{rank}. {str(role['job_title']).title()}  ·  {str(role['sector']).title()}  [{match_label}]"
+                    with st.expander(label, expanded=False):
+                        sel_sector = role["sector"]
+                        sel_job = role["job_title"]
+                        det_a, det_b = st.columns([3, 2])
+                        with det_a:
+                            job_desc = platform.get_job_description(sel_sector, sel_job) or ""
+                            st.markdown("<div class='glass-card'><h4>📖 Job Description</h4></div>", unsafe_allow_html=True)
+                            st.write(job_desc if job_desc else "No description available.")
 
-                # Show full details for selected role
-                if st.session_state.get("course_explore_selected_role"):
-                    sel_sector, sel_job = st.session_state["course_explore_selected_role"].split("||", 1)
-                    st.markdown("---")
-                    st.markdown(f"### 📋 {sel_job.title()} — {sel_sector.title()}")
-
-                    det_a, det_b = st.columns([3, 2])
-                    with det_a:
-                        job_desc = platform.get_job_description(sel_sector, sel_job) or ""
-                        st.markdown("<div class='glass-card'><h4>📖 Job Description</h4></div>", unsafe_allow_html=True)
-                        st.write(job_desc if job_desc else "No description available.")
-
-                        tsc_skills = platform.get_raw_tsc_skills(sel_sector, sel_job)
-                        if tsc_skills:
-                            st.markdown("<div class='gradient-card'><h4>🛠️ Skills Required</h4></div>", unsafe_allow_html=True)
-                            with st.expander("View skills", expanded=True):
+                            tsc_skills = platform.get_raw_tsc_skills(sel_sector, sel_job)
+                            if tsc_skills:
+                                st.markdown("<div class='gradient-card'><h4>🛠️ Skills Required</h4></div>", unsafe_allow_html=True)
                                 for s in tsc_skills:
                                     st.markdown(f"**{s['skill']}** &nbsp; {_level_badge(s['level'])}", unsafe_allow_html=True)
                                     if s['description']:
                                         st.caption(s['description'])
 
-                    with det_b:
-                        st.markdown("<div class='gradient-card-blue'><h4>📚 Recommended Courses</h4></div>", unsafe_allow_html=True)
-                        if job_desc:
-                            with st.spinner("Finding courses…"):
+                        with det_b:
+                            st.markdown("<div class='gradient-card-blue'><h4>📚 Recommended Courses</h4></div>", unsafe_allow_html=True)
+                            if job_desc:
                                 try:
                                     det_courses = platform.get_top_courses(sel_sector, sel_job, top_n=5)
                                 except Exception:
                                     det_courses = []
-                            for i, c in enumerate(det_courses, 1):
-                                st.markdown(f"<div class='course-card'><strong>{i}. {c['code']}</strong><br>{c['name'].title()}<br><small>Relevance: {c['score']*100:.0f}%</small></div>", unsafe_allow_html=True)
-                        else:
-                            st.info("No job description available for course matching.")
+                                for i, c in enumerate(det_courses, 1):
+                                    st.markdown(f"<div class='course-card'><strong>{i}. {c['code']}</strong><br>{c['name'].title()}<br><small>Relevance: {c['score']*100:.0f}%</small></div>", unsafe_allow_html=True)
+                            else:
+                                st.info("No job description available for course matching.")
 
     # ── MODE 1: Role → Details (existing flow) ────────────────────────────────
     else:
