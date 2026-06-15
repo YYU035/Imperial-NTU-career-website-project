@@ -149,11 +149,11 @@ div[data-testid="stRadio"] > div > label:has(input:checked) div {
     color: white !important;
 }
 div[data-testid="stRadio"] > div > label input { display: none; }
-/* Expander content — white background, dark text */
-[data-testid="stExpander"] { background: white !important; border-radius: 0.5rem; }
-[data-testid="stExpander"] details { background: white !important; }
-[data-testid="stExpander"] summary { color: #1a1a2e !important; font-weight: 600; }
-[data-testid="stExpander"] div[data-testid="stExpanderDetails"] { background: white !important; color: #1a1a2e !important; }
+/* Expander — light blue background, dark text */
+[data-testid="stExpander"] { background: #e8f0fe !important; border-radius: 0.5rem; }
+[data-testid="stExpander"] details { background: #e8f0fe !important; }
+[data-testid="stExpander"] summary { color: #1a1a2e !important; font-weight: 600; background: #e8f0fe !important; }
+[data-testid="stExpander"] div[data-testid="stExpanderDetails"] { background: #e8f0fe !important; color: #1a1a2e !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -178,12 +178,12 @@ _logo_path = Path(__file__).parent / "ntu_eee_logo.png"
 _logo_b64 = base64.b64encode(_logo_path.read_bytes()).decode() if _logo_path.exists() else ""
 st.markdown(f"""
 <div class='main-header'>
-    <div style='display:flex;align-items:center;gap:20px;flex-wrap:wrap;'>
-        {"<img src='data:image/png;base64," + _logo_b64 + "' style='height:64px;border-radius:10px;background:white;padding:6px 10px;'>" if _logo_b64 else ""}
+    <div style='display:flex;align-items:center;justify-content:space-between;'>
         <div>
             <h1 style='margin:0;'>🎓 NTU EEE Career Pathways Platform</h1>
             <p style='margin:0.3rem 0 0 0;'>Career Exploration Platform for EEE Students | Built in collaboration with Imperial College London</p>
         </div>
+        {"<img src='data:image/png;base64," + _logo_b64 + "' style='height:64px;border-radius:10px;background:white;padding:6px 10px;flex-shrink:0;'>" if _logo_b64 else ""}
     </div>
 </div>
 """, unsafe_allow_html=True)
