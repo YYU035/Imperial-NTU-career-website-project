@@ -178,8 +178,19 @@ _logo_path = Path(__file__).parent / "ntu_eee_logo.png"
 _logo_b64 = base64.b64encode(_logo_path.read_bytes()).decode() if _logo_path.exists() else ""
 _logo_html = f"<img src='data:image/png;base64,{_logo_b64}' style='height:64px;border-radius:10px;background:white;padding:6px 10px;flex-shrink:0;'>" if _logo_b64 else ""
 
+_hive_path = Path(__file__).parent / "ntu_hive.jpeg"
+_hive_b64 = base64.b64encode(_hive_path.read_bytes()).decode() if _hive_path.exists() else ""
+
+_imp_logo_path = Path(__file__).parent / "imperial_logo.png"
+_imp_logo_b64 = base64.b64encode(_imp_logo_path.read_bytes()).decode() if _imp_logo_path.exists() else ""
+
+_hive_bg = (
+    f"linear-gradient(to right, #1e3c72 0%, #1e3c72 28%, rgba(20,50,110,0.45) 46%, rgba(20,50,110,0.45) 54%, #2a5298 72%, #2a5298 100%),"
+    f"url('data:image/jpeg;base64,{_hive_b64}') center/cover no-repeat"
+) if _hive_b64 else "linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)"
+
 st.markdown(f"""
-<div class='main-header'>
+<div class='main-header' style='background:{_hive_bg};'>
     <div style='display:flex;align-items:center;justify-content:space-between;'>
         <div>
             <h1 style='margin:0;'>NTU EEE Career Pathways Platform</h1>
@@ -728,7 +739,7 @@ with st.sidebar:
 
 
 # ========== Tabs ==========
-tab1, tab2, tab3, tab5, tab_chat = st.tabs(["🔍 Explore Jobs", "📄 CV Analysis", "🎤 Mock Interview", "📊 Analytics", "💬 AI Chat"])
+tab1, tab2, tab3, tab5, tab_chat, tab_imperial = st.tabs(["🔍 Explore Jobs", "📄 CV Analysis", "🎤 Mock Interview", "📊 Analytics", "💬 AI Chat", "Imperial Platform"])
 
 # ==================== TAB 1: Explore Jobs ====================
 with tab1:
@@ -1492,6 +1503,257 @@ with tab_chat:
             if st.button("💬 Open Chat Panel", type="primary", use_container_width=True, key="open_chat_from_tab"):
                 st.session_state["sidebar_visible"] = True
                 st.rerun()
+
+# ==================== TAB: Imperial Platform ====================
+with tab_imperial:
+    st.markdown("<h2 class='section-header'>Imperial College London Platform</h2>", unsafe_allow_html=True)
+
+    # ── Collaboration Banner ──────────────────────────────────────────────────
+    _imp_logo_html = (
+        f"<img src='data:image/png;base64,{_imp_logo_b64}' "
+        f"style='height:56px;border-radius:8px;background:white;padding:6px 12px;flex-shrink:0;'>"
+        if _imp_logo_b64 else
+        "<div style='background:white;border-radius:8px;padding:10px 18px;"
+        "font-weight:700;color:#003E74;font-size:0.9rem;'>Imperial EEE</div>"
+    )
+    _ntu_badge_html = (
+        f"<img src='data:image/png;base64,{_logo_b64}' "
+        f"style='height:56px;border-radius:8px;background:white;padding:6px 12px;flex-shrink:0;'>"
+        if _logo_b64 else
+        "<div style='background:white;border-radius:8px;padding:10px 18px;"
+        "font-weight:700;color:#1e3c72;font-size:0.9rem;'>NTU EEE</div>"
+    )
+    st.markdown(f"""
+    <div style='background:linear-gradient(135deg,#003E74 0%,#006EAF 55%,#1e3c72 100%);
+                border-radius:1.2rem;padding:2rem 2.5rem;margin-bottom:2rem;
+                box-shadow:0 10px 40px rgba(0,0,0,0.18);'>
+        <div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;'>
+            <div style='flex:1;min-width:240px;'>
+                <h2 style='color:white;margin:0;font-size:1.75rem;font-weight:700;'>
+                    NTU x Imperial EEE Career Platforms
+                </h2>
+                <p style='color:rgba(255,255,255,0.88);margin:0.6rem 0 0 0;font-size:0.97rem;line-height:1.6;'>
+                    A cross-university collaboration between Nanyang Technological University Singapore and
+                    Imperial College London — two world-leading engineering schools exploring how AI can guide
+                    EEE students toward meaningful careers, from Singapore's technology ecosystem to
+                    London's global engineering and financial hub.
+                </p>
+            </div>
+            <div style='display:flex;gap:1rem;align-items:center;flex-shrink:0;'>
+                {_ntu_badge_html}
+                <div style='color:white;font-size:1.6rem;font-weight:300;'>&#8596;</div>
+                {_imp_logo_html}
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── How Imperial's Platform Works ────────────────────────────────────────
+    st.markdown("<h3 class='section-header'>How the Imperial Platform Works</h3>", unsafe_allow_html=True)
+    st.markdown("""
+    <p style='color:#555;margin-bottom:1.2rem;'>
+        Unlike the free-browse approach used here, the Imperial platform uses a <strong>goal-first AI flow</strong> —
+        you provide your CV and career goal upfront, and an Azure AI agent generates a fully personalised
+        suite of five tabs tailored to you.
+    </p>
+    <div style='display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem;'>
+        <div style='background:linear-gradient(135deg,#003E74,#006EAF);color:white;
+                    border-radius:1rem;padding:1.3rem;text-align:center;'>
+            <div style='font-weight:700;font-size:1rem;margin-bottom:0.4rem;'>Step 1</div>
+            <div style='font-size:0.85rem;opacity:0.88;'>Upload your CV</div>
+        </div>
+        <div style='background:linear-gradient(135deg,#006EAF,#0087C8);color:white;
+                    border-radius:1rem;padding:1.3rem;text-align:center;'>
+            <div style='font-weight:700;font-size:1rem;margin-bottom:0.4rem;'>Step 2</div>
+            <div style='font-size:0.85rem;opacity:0.88;'>Set your career goal — pick from dropdown or describe it in free text</div>
+        </div>
+        <div style='background:linear-gradient(135deg,#667eea,#764ba2);color:white;
+                    border-radius:1rem;padding:1.3rem;text-align:center;'>
+            <div style='font-weight:700;font-size:1rem;margin-bottom:0.4rem;'>Step 3</div>
+            <div style='font-size:0.85rem;opacity:0.88;'>Azure AI agent analyses your CV against your goal holistically</div>
+        </div>
+        <div style='background:linear-gradient(135deg,#11998e,#38ef7d);color:#1a1a2e;
+                    border-radius:1rem;padding:1.3rem;text-align:center;'>
+            <div style='font-weight:700;font-size:1rem;margin-bottom:0.4rem;'>Step 4</div>
+            <div style='font-size:0.85rem;'>5 personalised tabs unlock instantly</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── 5 Output Tabs ────────────────────────────────────────────────────────
+    st.markdown("<p style='font-weight:600;font-size:1rem;color:#1a1a2e;margin-bottom:0.8rem;'>The 5 Personalised Output Tabs</p>", unsafe_allow_html=True)
+    _imp_output_tabs = [
+        ("My Profile",    "#003E74", "Imperial modules relevant to your goal + current skills extracted from your CV"),
+        ("My Roadmap",    "#006EAF", "Recommended modules, future experiences (ML internships, UROP, projects), and skills to develop"),
+        ("Job Match",     "#1e3c72", "Sector fit analysis, how your CV compares to the market, and optional match against a specific job posting"),
+        ("Interview Prep","#764ba2", "AI-powered mock interview practice aligned to your stated career goal"),
+        ("NTU Analytics", "#11998e", "SkillsFuture market data visualisations and a direct link back to this NTU platform"),
+    ]
+    _out_cols = st.columns(5)
+    for col, (title, colour, desc) in zip(_out_cols, _imp_output_tabs):
+        with col:
+            st.markdown(f"""
+            <div style='background:white;border-radius:1rem;padding:1rem 0.8rem;text-align:center;
+                        box-shadow:0 4px 15px rgba(0,0,0,0.08);border-top:4px solid {colour};
+                        min-height:140px;'>
+                <div style='font-weight:700;font-size:0.82rem;color:{colour};margin-bottom:0.5rem;'>{title}</div>
+                <div style='font-size:0.75rem;color:#555;line-height:1.4;'>{desc}</div>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Side-by-side Comparison ──────────────────────────────────────────────
+    st.markdown("<h3 class='section-header'>Platform Comparison</h3>", unsafe_allow_html=True)
+
+    _ntu_feats = [
+        "Free-browse job explorer — by sector, role, or your courses",
+        "CV upload: skills extraction, job matching, soft-skills radar",
+        "Singapore salary benchmarks per sector (2025)",
+        "Mock interview: Behavioural, Technical, CV Deep Dive",
+        "SkillsFuture + Skill Taxonomy + CareerAxis market analytics",
+        "Always-on AI career advisor chatbot in sidebar",
+        "Groq / Llama 3.3-70B for all AI features",
+        "Singapore job market and SkillsFuture TSC framework",
+        "Course to Jobs: discover roles from NTU modules you have taken",
+        "No login required — explore freely at any stage",
+    ]
+    _imp_feats = [
+        "Goal-first flow — CV + career goal unlock everything at once",
+        "My Profile: Imperial modules + skills mapped to your goal",
+        "Personalised roadmap: modules, UROP, internship suggestions",
+        "Job Match: sector fit + CV vs market + specific posting match",
+        "Interview prep aligned specifically to your career goal",
+        "SkillsFuture analytics + cross-links to NTU platform",
+        "Azure AI agent for holistic, goal-aware analysis",
+        "UK / London job market context",
+        "Imperial EEE module catalog as the course backbone",
+        "CV + goal submitted once — all tabs personalised together",
+    ]
+
+    _ntu_rows = "".join(
+        f"<div style='background:rgba(255,255,255,0.13);border-radius:0.5rem;"
+        f"padding:0.5rem 0.8rem;font-size:0.83rem;margin-bottom:0.4rem;'>{f}</div>"
+        for f in _ntu_feats
+    )
+    _imp_rows = "".join(
+        f"<div style='background:rgba(255,255,255,0.13);border-radius:0.5rem;"
+        f"padding:0.5rem 0.8rem;font-size:0.83rem;margin-bottom:0.4rem;'>{f}</div>"
+        for f in _imp_feats
+    )
+
+    cmp_l, cmp_r = st.columns(2)
+    with cmp_l:
+        st.markdown(f"""
+        <div style='background:linear-gradient(135deg,#1e3c72,#2a5298);color:white;
+                    border-radius:1.2rem;padding:1.5rem;'>
+            <h3 style='color:white;margin:0 0 1rem 0;'>NTU EEE Platform</h3>
+            {_ntu_rows}
+        </div>""", unsafe_allow_html=True)
+    with cmp_r:
+        st.markdown(f"""
+        <div style='background:linear-gradient(135deg,#003E74,#006EAF);color:white;
+                    border-radius:1.2rem;padding:1.5rem;'>
+            <h3 style='color:white;margin:0 0 1rem 0;'>Imperial EEE Platform</h3>
+            {_imp_rows}
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Shared Design Philosophy ─────────────────────────────────────────────
+    st.markdown("<h3 class='section-header'>Shared Design Philosophy</h3>", unsafe_allow_html=True)
+
+    _phil = [
+        ("SkillsFuture Backbone",
+         "Both platforms use Singapore's SkillsFuture TSC (Technical Skills & Competencies) framework "
+         "as the shared skills ontology — ensuring the language of skills is consistent across both "
+         "universities and both job markets."),
+        ("EEE-First Design",
+         "Built specifically for Electrical & Electronic Engineering students, not repurposed generic "
+         "career tools. Course catalogs, sector data, AI system prompts, and job matching logic are "
+         "all EEE-tailored from the ground up."),
+        ("AI-Powered Personalisation",
+         "Both platforms use large language models to go beyond keyword matching — providing "
+         "contextual, actionable guidance. NTU uses Groq/Llama for real-time advice; "
+         "Imperial uses Azure AI for holistic goal-driven analysis."),
+        ("Local Context, Shared Method",
+         "The methodology is intentionally mirrored so findings are comparable. NTU targets "
+         "Singapore's semiconductor, ICT, and defence sectors; Imperial targets UK engineering "
+         "and finance. Same framework, different labour markets."),
+    ]
+    ph_cols = st.columns(4)
+    for col, (title, desc) in zip(ph_cols, _phil):
+        with col:
+            st.markdown(f"""
+            <div class='glass-card' style='text-align:center;height:100%;'>
+                <h4 style='color:#003E74;margin:0 0 0.5rem 0;font-size:0.9rem;'>{title}</h4>
+                <p style='font-size:0.8rem;color:#555;line-height:1.5;margin:0;'>{desc}</p>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Key Differences at a Glance ──────────────────────────────────────────
+    st.markdown("<h3 class='section-header'>Key Differences at a Glance</h3>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style='display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem;'>
+        <div class='info-box'>
+            <strong>Entry point</strong><br>
+            <span style='font-size:0.85rem;'>
+            NTU lets you explore freely — browse jobs, view analytics, or upload a CV at any time.<br><br>
+            Imperial asks for CV + goal upfront, then personalises everything in one shot.
+            </span>
+        </div>
+        <div class='info-box'>
+            <strong>AI architecture</strong><br>
+            <span style='font-size:0.85rem;'>
+            NTU uses a conversational LLM (Llama 3.3) in a sidebar chatbot plus per-feature calls for CV feedback and interviews.<br><br>
+            Imperial uses a single Azure AI agent that processes CV + goal together and drives all five output tabs.
+            </span>
+        </div>
+        <div class='info-box'>
+            <strong>Career roadmap</strong><br>
+            <span style='font-size:0.85rem;'>
+            NTU maps courses to roles and roles to required skills — you build your own path.<br><br>
+            Imperial generates a fully structured roadmap: recommended modules, suggested experiences (UROP, internships), and a skills development plan.
+            </span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── CTA ──────────────────────────────────────────────────────────────────
+    st.markdown("""
+    <div class='glass-card' style='text-align:center;padding:2.5rem 2rem;border-top:4px solid #003E74;'>
+        <h3 style='color:#003E74;margin:0 0 0.5rem 0;'>Try the Imperial EEE Platform</h3>
+        <p style='color:#555;margin:0 0 1.2rem 0;font-size:0.95rem;'>
+            Upload your CV, state your career goal, and get a personalised roadmap, job match analysis,
+            and interview prep — built by the Imperial EEE team.
+        </p>
+        <div style='display:flex;justify-content:center;gap:1.5rem;flex-wrap:wrap;
+                    font-size:0.85rem;color:#444;margin-bottom:1.5rem;'>
+            <span>CV-driven personalisation</span>
+            <span>&#183;</span>
+            <span>AI career roadmap</span>
+            <span>&#183;</span>
+            <span>UK job market context</span>
+            <span>&#183;</span>
+            <span>Interview preparation</span>
+            <span>&#183;</span>
+            <span>SkillsFuture analytics</span>
+        </div>
+        <p style='font-size:0.8rem;color:#999;margin:0;'>
+            Note: the platform requires a short sign-in via Streamlit Community Cloud.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    _cta_l, _cta_m, _cta_r = st.columns([1, 2, 1])
+    with _cta_m:
+        st.link_button(
+            "Open Imperial EEE Platform",
+            "https://imperialntucareers.streamlit.app/",
+            use_container_width=True,
+            type="primary",
+        )
+
 
 # Footer
 st.markdown("""<div class='footer'><h3>🎓 NTU EEE Career Pathways Platform</h3><p>NTU Singapore • 2026</p></div>""", unsafe_allow_html=True)
