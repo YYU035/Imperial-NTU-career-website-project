@@ -31,6 +31,13 @@ STRONG_THRESHOLD = 0.20
 GOOD_THRESHOLD   = 0.10
 WEAK_THRESHOLD   = 0.04
 
+# Course-relevance thresholds — many SkillsFuture job descriptions are short/generic,
+# so a course's cosine score can be low even when it's the best available match. These
+# bands let the UI be honest about match confidence instead of presenting every top-N
+# course as an equally strong recommendation.
+COURSE_RELEVANT_THRESHOLD = 0.12
+COURSE_POSSIBLE_THRESHOLD = 0.06
+
 # ── Skill dictionary (from resume_embeddings_noexpiry.py) ─────────────────────
 SKILL_TERMS: set = {
     # Programming / CS
@@ -172,6 +179,11 @@ def _extract_requirements(text: str) -> str:
     return m.group(1).strip() if m else str(text)
 
 
+def _strip_levels(text: str) -> str:
+    """Strip trailing ' L<n>' proficiency-level markers so they don't pollute TF-IDF terms."""
+    return re.sub(r"\bL\d+\b", "", str(text))
+
+
 def _safe(val: Any) -> str:
     """Return string; treat NaN / 'nan' / None as empty string."""
     if val is None:
@@ -246,9 +258,18 @@ class EEECareerPlatform:
         print("✓ Platform ready.", flush=True)
 
     def _fit_course_tfidf(self) -> None:
-        texts = self._courses["Course Description"].fillna("").tolist()
+        # Learning Outcomes carries the actual syllabus-level detail (specific topics,
+        # techniques, tools) that the shorter Course Description prose lacks — combining
+        # both gives TF-IDF a much richer, more specific vocabulary to match against.
+        desc = self._courses["Course Description"].fillna("")
+        outcomes = self._courses.get("Learning Outcomes", pd.Series("", index=self._courses.index)).fillna("")
+        texts = (desc + " " + outcomes).tolist()
+        # sublinear_tf + max_df damp generic words that recur heavily within/across course
+        # blurbs (e.g. "design", "system", "engineering"), which otherwise dominate cosine
+        # similarity and drag in irrelevant courses regardless of the job being matched.
         self._course_vec = TfidfVectorizer(
-            max_features=10000, ngram_range=(1, 2), stop_words="english"
+            max_features=10000, ngram_range=(1, 2), stop_words="english",
+            sublinear_tf=True, max_df=0.5,
         )
         self._course_mat = self._course_vec.fit_transform(texts)
 
@@ -268,11 +289,27 @@ class EEECareerPlatform:
         self._posting_full_mat = self._posting_full_vec.fit_transform(full_texts)
 
     def _fit_sf_tfidf(self) -> None:
-        texts = self._skillsfuture["Job Description"].fillna("").tolist()
+        texts = [self._job_match_text(row) for _, row in self._skillsfuture.iterrows()]
         self._sf_vec = TfidfVectorizer(
-            max_features=10000, ngram_range=(1, 2), stop_words="english"
+            max_features=10000, ngram_range=(1, 2), stop_words="english",
+            sublinear_tf=True, max_df=0.5,
         )
         self._sf_mat = self._sf_vec.fit_transform(texts)
+
+    @staticmethod
+    def _job_match_text(row: pd.Series) -> str:
+        """
+        Text used to match a SkillsFuture role against courses/postings.
+        Job Description alone is short, generic prose (e.g. "leads improvement
+        projects, agile and systematic") that collides with unrelated course
+        vocabulary. Technical Skills (with levels) carries the actual specific
+        competencies (e.g. "Power Plant Operations Management") that should
+        drive the match — combining both grounds matching in real syllabus/skill
+        content instead of incidental keyword overlap.
+        """
+        desc = _safe(row.get("Job Description"))
+        skills = _strip_levels(_safe(row.get("Technical Skills (with levels)")))
+        return f"{desc} {skills}".strip()
 
     def _load_dataframes(self) -> None:
         for path in (_SKILLSFUTURE, _COURSES, _CAREERAXIS, _TAXONOMY):
@@ -344,6 +381,14 @@ class EEECareerPlatform:
         desc = _safe(row.get("Job Description"))
         return desc if desc else None
 
+    def _get_job_match_text(self, sector: str, job_title: str) -> Optional[str]:
+        """Job Description + Technical Skills combined — see `_job_match_text`."""
+        row = self._get_job_row(sector, job_title)
+        if row is None:
+            return None
+        text = self._job_match_text(row)
+        return text if text.strip() else None
+
     def get_all_courses(self) -> List[Dict]:
         self._assert_loaded()
         return [
@@ -360,7 +405,8 @@ class EEECareerPlatform:
         selected = self._courses[mask]
         if selected.empty:
             return []
-        query = " ".join(selected["Course Description"].fillna("").tolist())
+        outcomes = selected.get("Learning Outcomes", pd.Series("", index=selected.index)).fillna("")
+        query = " ".join((selected["Course Description"].fillna("") + " " + outcomes).tolist())
         if not query.strip():
             return []
         q_vec = self._sf_vec.transform([query])
@@ -385,21 +431,29 @@ class EEECareerPlatform:
         self, sector: str, job_title: str, top_n: int = 5
     ) -> List[Dict]:
         self._assert_loaded()
-        desc = self.get_job_description(sector, job_title)
-        if not desc:
+        match_text = self._get_job_match_text(sector, job_title)
+        if not match_text:
             raise ValueError(
                 f"No job description available for '{job_title}' in '{sector}'."
             )
 
-        q_vec = self._course_vec.transform([desc])
+        q_vec = self._course_vec.transform([match_text])
         sims = cosine_similarity(q_vec, self._course_mat)[0]
         top_idxs = sims.argsort()[-top_n:][::-1]
+
+        def _relevance(score: float) -> str:
+            if score >= COURSE_RELEVANT_THRESHOLD:
+                return "Relevant"
+            if score >= COURSE_POSSIBLE_THRESHOLD:
+                return "Possible"
+            return "Weak"
 
         return [
             {
                 "code": _safe(self._courses.iloc[i].get("Course Code")),
                 "name": _safe(self._courses.iloc[i]["Course Name"]),
                 "score": float(sims[i]),
+                "relevance": _relevance(float(sims[i])),
                 "description": _safe(self._courses.iloc[i].get("Course Description")),
                 "learning_outcomes": _safe(
                     self._courses.iloc[i].get("Learning Outcomes", "")
@@ -412,13 +466,13 @@ class EEECareerPlatform:
         self, sector: str, job_title: str, top_n: int = 3
     ) -> List[Dict]:
         self._assert_loaded()
-        desc = self.get_job_description(sector, job_title)
-        if not desc:
+        match_text = self._get_job_match_text(sector, job_title)
+        if not match_text:
             raise ValueError(
                 f"No job description available for '{job_title}' in '{sector}'."
             )
 
-        q_vec = self._posting_req_vec.transform([desc])
+        q_vec = self._posting_req_vec.transform([match_text])
         sims = cosine_similarity(q_vec, self._posting_req_mat)[0]
         top_idxs = sims.argsort()[-top_n:][::-1]
 

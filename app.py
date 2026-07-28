@@ -359,12 +359,31 @@ def _build_chat_html(history: list) -> str:
     </body></html>"""
 
 
+def _ntu_course_list_text() -> str:
+    """Real NTU course codes/names, injected into AI prompts so the model can only
+    reference courses that actually exist instead of inventing plausible-sounding ones."""
+    try:
+        courses = platform.get_all_courses()
+    except Exception:
+        return ""
+    lines = "\n".join(f"- {c['code']} — {c['name'].title()}" for c in courses if c["code"])
+    return lines
+
+
 def _build_system_prompt() -> str:
     try:
         sectors = platform.get_sectors()
         sector_list = ", ".join(s.title() for s in sectors)
     except Exception:
         sector_list = "Semiconductor, ICT, Power & Energy, Telecommunications, Defence, Biomedical, Aerospace"
+    course_list = _ntu_course_list_text()
+    course_block = (
+        f"\n\nACTUAL NTU EEE COURSE LIST (the only courses that exist — every course you mention "
+        f"MUST be one of these, quoted with its exact code and name):\n{course_list}\n"
+        "Never invent, guess, or approximate a course code/name. If none of the courses above fit "
+        "what the student needs, say so explicitly instead of making one up."
+        if course_list else ""
+    )
     return f"""You are an EEE (Electrical & Electronic Engineering) Career Advisor chatbot embedded in NTU Singapore's career platform.
 
 The platform contains:
@@ -372,6 +391,7 @@ The platform contains:
 - NTU EEE course catalog matched to job roles via TF-IDF similarity
 - SkillsFuture Singapore TSC (Technical Skills & Competencies) framework data
 - CV analysis: skill extraction, job match scoring, soft-skills radar
+{course_block}
 
 Salary benchmarks (Singapore, 2024-2025):
 - Fresh grad: S$3,500–S$4,800/month (semiconductor fabs often S$4,200–S$4,800)
@@ -423,6 +443,12 @@ def _get_cv_ai_feedback(cv_text: str, skills: list, jobs: list) -> str:
     api_key = os.environ.get("GROQ_API_KEY", "")
     top_jobs = ", ".join(j.get("position", "") for j in jobs[:3]) or "EEE engineering roles"
     skill_list = ", ".join(skills[:20]) or "none detected"
+    course_list = _ntu_course_list_text()
+    course_note = (
+        f"\nIf you recommend an NTU course anywhere in this report, it MUST be one of these "
+        f"actual courses (exact code and name) — never invent one:\n{course_list}\n"
+        if course_list else ""
+    )
     prompt = f"""You are an expert career coach reviewing an EEE (Electrical & Electronic Engineering) student's CV for roles in Singapore.
 
 CV TEXT:
@@ -432,7 +458,7 @@ CV TEXT:
 
 Detected skills: {skill_list}
 Top matching jobs: {top_jobs}
-
+{course_note}
 Provide a structured CV feedback report with these sections:
 1. **Overall Impression** (2-3 sentences)
 2. **Strengths** (3 bullet points — specific things done well)
@@ -475,6 +501,8 @@ Rules:
 - Ask ONE behavioural question at a time (STAR method)
 - If CV is provided, reference specific experiences from it to make questions personal
 - After the student answers: give 2-3 sentence feedback, then ask the next question
+- Base all feedback strictly on what the student actually said in their answers (or what is explicitly in the CV) — never reference experiences, companies, projects, or claims they did not state
+- If an answer is empty or too short to assess, say so honestly instead of inventing content to react to
 - Cover: teamwork, leadership, problem-solving, communication, handling failure, time management
 - After 5 complete Q&A rounds, append exactly [INTERVIEW_COMPLETE] at the end of your final feedback
 - Be professional and encouraging
@@ -484,6 +512,8 @@ Start: briefly introduce yourself and ask Question 1."""
 Rules:
 - Ask ONE technical question at a time, starting from fundamentals then increasing difficulty
 - After each answer: give specific technical feedback, correct misconceptions, then ask next question
+- Base all feedback strictly on what the student actually said — never reference experiences, companies, projects, or claims they did not state
+- If an answer is empty or too short to assess, say so honestly instead of inventing content to react to
 - Test: core concepts, problem-solving approach, practical applications, relevant tools
 - After 5 complete Q&A rounds, append exactly [INTERVIEW_COMPLETE] at the end of your final feedback
 Start: briefly introduce yourself and ask Question 1 on {topic}."""
@@ -495,6 +525,8 @@ Start: briefly introduce yourself and ask Question 1 on {topic}."""
 Rules:
 - Ask ONE question at a time about specific CV items (projects, experiences, skills, education)
 - After each answer: give brief feedback then ask the next question
+- Base all feedback strictly on what the student actually said (or what is explicitly written in the CV above) — never reference experiences, companies, projects, or claims that appear in neither
+- If an answer is empty or too short to assess, say so honestly instead of inventing content to react to
 - Challenge: technical decisions, lessons learned, impact, how skills apply to target roles
 - After 5 complete Q&A rounds, append exactly [INTERVIEW_COMPLETE] at the end of your final feedback
 - Reference specific CV items by name
@@ -505,7 +537,7 @@ def _iv_log_result(report: str):
     """Save a completed interview result to the session progress log."""
     import re as _re
     from datetime import datetime
-    rating_match = _re.search(r'(\d+)\s*/\s*10', report)
+    rating_match = _re.search(r'(\d+)\s*(?:/|out of)\s*10', report, _re.IGNORECASE)
     rating = int(rating_match.group(1)) if rating_match else None
     entry = {
         "type": st.session_state.get("iv_type", "Interview").replace("⚙️ ","").replace("🧠 ","").replace("📄 ",""),
@@ -515,6 +547,19 @@ def _iv_log_result(report: str):
         "q_count": len([m for m in st.session_state.get("iv_history",[]) if m["role"] == "student"]),
     }
     st.session_state.setdefault("iv_log", []).append(entry)
+
+
+def _iv_extract_qa_pairs(history: list) -> list:
+    """Pair each student answer with the interviewer question it responded to,
+    for the per-question recording review on the report page."""
+    pairs = []
+    last_q = None
+    for m in history:
+        if m["role"] == "interviewer":
+            last_q = m["text"].replace("[INTERVIEW_COMPLETE]", "").strip()
+        elif m["role"] == "student":
+            pairs.append({"question": last_q or "", "answer": m["text"], "clip": m.get("clip")})
+    return pairs
 
 
 def _iv_call(message: str) -> str:
@@ -555,30 +600,89 @@ def _iv_camera_tts_html(latest_msg: str, msg_idx: int, q_num: int, total_q: int 
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 *{{box-sizing:border-box;margin:0;padding:0;}}
 body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:transparent;padding:4px;}}
-#cam-wrap{{position:relative;border-radius:12px;overflow:hidden;background:#1a1a2e;aspect-ratio:4/3;}}
+#cam-wrap{{position:relative;border-radius:12px;overflow:hidden;background:#1a1a2e;height:150px;}}
 #cam{{width:100%;height:100%;object-fit:cover;display:none;}}
-#cam-off{{display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:13px;flex-direction:column;gap:6px;min-height:140px;}}
+#cam-off{{display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:13px;flex-direction:column;gap:6px;}}
+#rec-dot{{display:none;position:absolute;top:8px;left:8px;align-items:center;gap:5px;
+  background:rgba(0,0,0,0.55);color:#fff;padding:3px 9px;border-radius:12px;font-size:11px;}}
+#rec-dot span{{width:8px;height:8px;border-radius:50%;background:#e53935;animation:pulse 1.2s infinite;}}
+@keyframes pulse{{0%,100%{{opacity:1}}50%{{opacity:0.3}}}}
 #progress-bar-bg{{background:#e0e0e0;border-radius:8px;height:8px;margin:8px 0 4px;}}
 #progress-bar{{background:linear-gradient(90deg,#667eea,#764ba2);height:8px;border-radius:8px;width:{pct}%;transition:width 0.4s;}}
 #q-label{{font-size:12px;color:#666;text-align:center;}}
-#tts-btn{{margin-top:6px;width:100%;padding:6px;border:1px solid #ddd;border-radius:8px;background:white;font-size:12px;cursor:pointer;color:#555;}}
-#tts-btn:hover{{background:#f5f5f5;}}
+#tts-btn,#save-btn{{margin-top:6px;width:100%;padding:6px;border:1px solid #ddd;border-radius:8px;background:white;font-size:12px;cursor:pointer;color:#555;}}
+#tts-btn:hover,#save-btn:hover:not(:disabled){{background:#f5f5f5;}}
+#save-btn:disabled{{opacity:0.5;cursor:not-allowed;}}
+#save-hint{{font-size:10px;color:#999;text-align:center;margin-top:3px;}}
 </style></head><body>
 <div id="cam-wrap">
   <video id="cam" autoplay muted playsinline></video>
   <div id="cam-off"><span style="font-size:28px">📷</span><span>Allow camera access</span></div>
+  <div id="rec-dot"><span></span>Recording</div>
 </div>
 <div id="progress-bar-bg"><div id="progress-bar"></div></div>
 <div id="q-label">Question {min(q_num, total_q)} of {total_q}</div>
 <button id="tts-btn" onclick="speak()">🔊 Replay Question</button>
+<button id="save-btn" onclick="stopAndSave()" disabled>💾 Stop &amp; Save Clip</button>
+<div id="save-hint">Optional: save a clip of this answer to review later</div>
 <script>
-// Camera
-navigator.mediaDevices.getUserMedia({{video:true,audio:false}})
+// Camera + mic stream — recorded for later review, but the <video> stays muted
+// locally so there's no audio feedback loop.
+let mediaStream=null, recorder=null, chunks=[];
+navigator.mediaDevices.getUserMedia({{video:true,audio:true}})
   .then(s=>{{
+    mediaStream=s;
     const v=document.getElementById('cam');
     v.srcObject=s; v.style.display='block';
     document.getElementById('cam-off').style.display='none';
+    startRecording();
   }}).catch(()=>{{}});
+
+function startRecording(){{
+  if(!mediaStream||!window.MediaRecorder) return;
+  chunks=[];
+  let mimeType='video/webm;codecs=vp8,opus';
+  if(!MediaRecorder.isTypeSupported(mimeType)) mimeType='video/webm';
+  try{{ recorder=new MediaRecorder(mediaStream,{{mimeType,videoBitsPerSecond:250000}}); }}
+  catch(err){{ recorder=new MediaRecorder(mediaStream); }}
+  recorder.ondataavailable=(e)=>{{ if(e.data&&e.data.size>0) chunks.push(e.data); }};
+  recorder.start();
+  document.getElementById('rec-dot').style.display='flex';
+  document.getElementById('save-btn').disabled=false;
+}}
+
+function stopAndSave(){{
+  if(!recorder||recorder.state==='inactive') return;
+  document.getElementById('save-btn').disabled=true;
+  document.getElementById('save-btn').textContent='💾 Saving…';
+  recorder.onstop=()=>{{
+    const blob=new Blob(chunks,{{type:recorder.mimeType||'video/webm'}});
+    const reader=new FileReader();
+    reader.onloadend=()=>{{
+      writeClip(reader.result);
+      document.getElementById('rec-dot').style.display='none';
+      document.getElementById('save-btn').textContent='✅ Clip saved';
+    }};
+    reader.readAsDataURL(blob);
+  }};
+  recorder.stop();
+}}
+
+function writeClip(dataUrl){{
+  try{{
+    const tas=window.parent.document.querySelectorAll('textarea');
+    for(const ta of tas){{
+      const lbl=(ta.getAttribute('aria-label')||'').toLowerCase();
+      if(lbl.includes('recording clip')){{
+        const s=Object.getOwnPropertyDescriptor(window.parent.HTMLTextAreaElement.prototype,'value').set;
+        s.call(ta,dataUrl);
+        ta.dispatchEvent(new window.parent.Event('input',{{bubbles:true}}));
+        ta.dispatchEvent(new window.parent.Event('change',{{bubbles:true}}));
+        break;
+      }}
+    }}
+  }}catch(err){{}}
+}}
 
 // TTS — auto-speak new messages only
 const msg={safe_msg};
@@ -616,37 +720,81 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;backgrou
 <div id="prev"></div>
 <script>
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-let rec,active=false;
+let rec, userWantsActive=false, finalTranscript='';
 if(!SR){document.getElementById('st').textContent='⚠️ Not supported — use Chrome';document.getElementById('btn').disabled=true;}
 else{
   rec=new SR();rec.lang='en-SG';rec.continuous=true;rec.interimResults=true;
-  rec.onstart=()=>{active=true;document.getElementById('btn').className='on';
+
+  function writeAnswer(txt){
+    try{
+      const tas=window.parent.document.querySelectorAll('textarea');
+      for(const ta of tas){
+        const lbl=(ta.getAttribute('aria-label')||ta.placeholder||'').toLowerCase();
+        if(lbl.includes('answer')){
+          const s=Object.getOwnPropertyDescriptor(window.parent.HTMLTextAreaElement.prototype,'value').set;
+          s.call(ta,txt);
+          ta.dispatchEvent(new window.parent.Event('input',{bubbles:true}));
+          ta.dispatchEvent(new window.parent.Event('change',{bubbles:true}));
+          break;
+        }
+      }
+    }catch(err){}
+  }
+
+  rec.onstart=()=>{
+    document.getElementById('btn').className='on';
     document.getElementById('btn').textContent='🔴 Listening… click to stop';
     document.getElementById('st').textContent='Speak now…';
-    document.getElementById('prev').style.display='block';};
+    document.getElementById('prev').style.display='block';
+  };
   rec.onresult=(e)=>{
-    const txt=Array.from(e.results).map(r=>r[0].transcript).join('');
-    document.getElementById('prev').textContent=txt;
-    if(e.results[e.results.length-1].isFinal){
-      try{
-        const tas=window.parent.document.querySelectorAll('textarea');
-        for(const ta of tas){
-          const lbl=(ta.getAttribute('aria-label')||ta.placeholder||'').toLowerCase();
-          if(lbl.includes('answer')){
-            const s=Object.getOwnPropertyDescriptor(window.parent.HTMLTextAreaElement.prototype,'value').set;
-            s.call(ta,txt);ta.dispatchEvent(new window.parent.Event('input',{bubbles:true}));break;
-          }
-        }
-      }catch(err){}
+    // Accumulate finalised chunks into finalTranscript (survives restarts below) and
+    // write finalTranscript+interim on EVERY result, not just isFinal — otherwise any
+    // speech captured right before an unexpected stop is silently dropped.
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const r=e.results[i];
+      if(r.isFinal) finalTranscript+=r[0].transcript+' ';
+      else interim+=r[0].transcript;
+    }
+    const combined=(finalTranscript+interim).trim();
+    document.getElementById('prev').textContent=combined;
+    writeAnswer(combined);
+  };
+  rec.onerror=(e)=>{
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
+      userWantsActive=false;
+      document.getElementById('st').textContent='🚫 Microphone permission denied';
+    }
+    // other errors (no-speech, network, aborted) are transient — onend below decides
+    // whether to silently restart, so the answer keeps being captured.
+  };
+  rec.onend=()=>{
+    if(userWantsActive){
+      // Chrome silently ends continuous recognition after a pause or network hiccup —
+      // this used to look like the mic "cutting off"; restart transparently instead.
+      try{ rec.start(); }catch(err){}
+    } else {
+      reset();
     }
   };
-  rec.onerror=(e)=>{document.getElementById('st').textContent='Error: '+e.error;reset();};
-  rec.onend=reset;
 }
-function toggle(){active?rec.stop():rec.start();}
-function reset(){active=false;document.getElementById('btn').className='';
+function toggle(){
+  if(userWantsActive){
+    userWantsActive=false;
+    rec.stop();
+  }else{
+    userWantsActive=true;
+    finalTranscript='';
+    document.getElementById('prev').textContent='';
+    rec.start();
+  }
+}
+function reset(){
+  document.getElementById('btn').className='';
   document.getElementById('btn').textContent='🎤 Speak Answer';
-  document.getElementById('st').textContent='Chrome only · click to speak';}
+  document.getElementById('st').textContent='Chrome only · click to speak';
+}
 </script></body></html>"""
 
 
@@ -769,6 +917,34 @@ with tab1:
         else:
             return f"<span style='background:#e2e3e5;color:#383d41;padding:2px 8px;border-radius:12px;font-size:0.75rem;'>Level {lvl} · Expert — long-term goal</span>"
 
+    _COURSE_RELEVANCE_STYLE = {
+        "Relevant": ("#e8f5e9", "#2e7d32"),
+        "Possible": ("#fff8e1", "#8a6512"),
+        "Weak":     ("#f1f1f1", "#666666"),
+    }
+
+    def _render_course_card(i, c):
+        """Render a recommended-course card with a relevance badge, plus an
+        expander showing the real course description/learning outcomes that
+        drove the match — so students can see the grounding, not just a score."""
+        bg, fg = _COURSE_RELEVANCE_STYLE.get(c.get("relevance", "Weak"), _COURSE_RELEVANCE_STYLE["Weak"])
+        badge = f"<span style='background:{bg};color:{fg};padding:2px 9px;border-radius:10px;font-size:0.72rem;font-weight:700;white-space:nowrap;'>{c.get('relevance','Weak')} match</span>"
+        st.markdown(f"""<div class='course-card'>
+            <div style='display:flex;justify-content:space-between;align-items:flex-start;gap:8px;'>
+                <div><strong>{i}. {c['code']}</strong><br>{c['name'].title()}</div>
+                {badge}
+            </div>
+            <small style='opacity:0.85;'>Relevance score: {c['score']*100:.0f}%</small>
+        </div>""", unsafe_allow_html=True)
+        desc = (c.get("description") or "").strip()
+        outcomes = (c.get("learning_outcomes") or "").strip()
+        if desc or outcomes:
+            with st.expander(f"📖 What {c['code']} actually covers", expanded=False):
+                if desc:
+                    st.markdown(f"**Course description:** {desc}")
+                if outcomes:
+                    st.markdown(f"**Learning outcomes:** {outcomes}")
+
     explore_mode = st.radio(
         "explore_mode",
         ["🎯  I know my target role", "📚  Explore from my courses"],
@@ -849,7 +1025,7 @@ with tab1:
                                 except Exception:
                                     det_courses = []
                                 for i, c in enumerate(det_courses, 1):
-                                    st.markdown(f"<div class='course-card'><strong>{i}. {c['code']}</strong><br>{c['name'].title()}<br><small>Relevance: {c['score']*100:.0f}%</small></div>", unsafe_allow_html=True)
+                                    _render_course_card(i, c)
                             else:
                                 st.info("No job description available for course matching.")
 
@@ -928,7 +1104,7 @@ with tab1:
                                 courses = []
                                 st.warning(f"Course matching error: {e}")
                         for i, c in enumerate(courses, 1):
-                            st.markdown(f"<div class='course-card'><strong>{i}. {c['code']}</strong><br>{c['name'].title()}<br><small>Relevance: {c['score']*100:.0f}%</small></div>", unsafe_allow_html=True)
+                            _render_course_card(i, c)
                     else:
                         st.info("No job description available for course matching.")
 
@@ -1112,7 +1288,7 @@ with tab2:
         iv_c1, iv_c2 = st.columns(2)
         with iv_c1:
             if st.button("🧠 Behavioural Interview", width='stretch'):
-                for k in ("iv_mode","iv_history","iv_report","iv_busy","iv_started","iv_chat","iv_client"):
+                for k in ("iv_mode","iv_history","iv_report","iv_busy","iv_started","iv_chat","iv_client","iv_video_clip_box"):
                     st.session_state.pop(k, None)
                 st.session_state.iv_mode = "active"
                 st.session_state.iv_type = "🧠 Behavioural"
@@ -1123,7 +1299,7 @@ with tab2:
                 st.info("✅ Behavioural interview ready. Go to the **🎤 Mock Interview** tab to begin!")
         with iv_c2:
             if st.button(f"⚙️ Technical: {_cv_guessed_topic}", width='stretch'):
-                for k in ("iv_mode","iv_history","iv_report","iv_busy","iv_started","iv_chat","iv_client"):
+                for k in ("iv_mode","iv_history","iv_report","iv_busy","iv_started","iv_chat","iv_client","iv_video_clip_box"):
                     st.session_state.pop(k, None)
                 st.session_state.iv_mode = "active"
                 st.session_state.iv_type = "⚙️ Technical"
@@ -1203,7 +1379,7 @@ with tab3:
                 st.session_state.iv_type = iv_type_sel
                 st.session_state.iv_topic = iv_topic_sel
                 st.session_state.iv_started = False
-                for k in ("iv_chat", "iv_client"):
+                for k in ("iv_chat", "iv_client", "iv_video_clip_box"):
                     st.session_state.pop(k, None)
                 st.rerun()
 
@@ -1236,7 +1412,7 @@ with tab3:
         with chat_col:
             components.html(_iv_chat_html(iv_hist), height=440, scrolling=False)
         with cam_col:
-            components.html(_iv_camera_tts_html(latest_iv_msg, msg_idx, q_num), height=280, scrolling=False)
+            components.html(_iv_camera_tts_html(latest_iv_msg, msg_idx, q_num), height=340, scrolling=False)
 
         # Answer input
         answer = st.text_area("Your answer", placeholder="Type here or use the mic button below…",
@@ -1246,27 +1422,49 @@ with tab3:
         # Mic button
         components.html(_iv_mic_html(), height=90, scrolling=False)
 
+        # Hidden channel the camera component writes a recorded clip's data URL into
+        # (same cross-iframe technique as the mic-to-textarea hack above) — hidden via
+        # CSS below, never shown to the student. A widget's session_state value can't be
+        # reassigned after it's instantiated in the same run, so the clear requested by
+        # the Submit handler below is deferred here, before the widget is created.
+        if st.session_state.pop("_iv_clear_clip", False):
+            st.session_state["iv_video_clip_box"] = ""
+        video_clip = st.text_area("Recording clip data (hidden)", key="iv_video_clip_box",
+                                  label_visibility="collapsed", height=68)
+        st.markdown(
+            '<style>div[data-testid="stTextArea"]:has(textarea[aria-label="Recording clip data (hidden)"])'
+            '{display:none !important;}</style>',
+            unsafe_allow_html=True,
+        )
+
         ba, bb = st.columns(2)
         with ba:
             if st.button("📨 Submit Answer", type="primary", width='stretch',
                          disabled=st.session_state.iv_busy):
-                st.session_state.iv_busy = True
-                st.session_state.iv_history.append({"role": "student", "text": answer.strip()})
-                with st.spinner("Interviewer is responding…"):
-                    reply = _iv_call(answer.strip())
-                st.session_state.iv_history.append({"role": "interviewer", "text": reply})
-                st.session_state.iv_busy = False
-                if "[INTERVIEW_COMPLETE]" in reply:
-                    with st.spinner("Generating your report…"):
-                        report = _iv_call(
-                            "Generate a comprehensive interview assessment report. "
-                            "Include: overall rating (1-10), strengths, areas for improvement, "
-                            "and 3 specific actionable tips. Format with clear sections and bullet points."
-                        )
-                    st.session_state.iv_report = report
-                    _iv_log_result(report)
-                    st.session_state.iv_mode = "done"
-                st.rerun()
+                if not answer.strip():
+                    st.warning("⚠️ Please give an answer (type or speak) before submitting.")
+                else:
+                    st.session_state.iv_busy = True
+                    clip = (video_clip or "").strip() or None
+                    st.session_state.iv_history.append({"role": "student", "text": answer.strip(), "clip": clip})
+                    st.session_state["_iv_clear_clip"] = True  # don't let a stale clip reattach next answer
+                    with st.spinner("Interviewer is responding…"):
+                        reply = _iv_call(answer.strip())
+                    st.session_state.iv_history.append({"role": "interviewer", "text": reply})
+                    st.session_state.iv_busy = False
+                    if "[INTERVIEW_COMPLETE]" in reply:
+                        with st.spinner("Generating your report…"):
+                            report = _iv_call(
+                                "Generate a comprehensive interview assessment report. "
+                                "Include: overall rating (1-10), strengths, areas for improvement, "
+                                "and 3 specific actionable tips. Format with clear sections and bullet points. "
+                                "Base this strictly on the transcript above — do not invent companies, "
+                                "projects, or claims the student did not state."
+                            )
+                        st.session_state.iv_report = report
+                        _iv_log_result(report)
+                        st.session_state.iv_mode = "done"
+                    st.rerun()
         with bb:
             if st.button("🏁 End & Get Report", width='stretch', disabled=st.session_state.iv_busy):
                 st.session_state.iv_busy = True
@@ -1275,7 +1473,9 @@ with tab3:
                         "The student has ended the interview early. Based on the answers given so far, "
                         "generate a comprehensive assessment report with: overall rating (1-10), "
                         "strengths, areas for improvement, and 3 specific actionable tips. "
-                        "Format with clear sections and bullet points."
+                        "Format with clear sections and bullet points. Base this strictly on the "
+                        "transcript above — do not invent companies, projects, or claims the student "
+                        "did not state."
                     )
                 st.session_state.iv_report = report
                 _iv_log_result(report)
@@ -1298,8 +1498,26 @@ with tab3:
         else:
             st.info("No report generated.")
 
+        qa_pairs = _iv_extract_qa_pairs(st.session_state.get("iv_history", []))
+        clipped_pairs = [p for p in qa_pairs if p["clip"]]
+        if clipped_pairs:
+            st.markdown("<h3 class='section-header'>📹 Review Your Answers</h3>", unsafe_allow_html=True)
+            st.caption("Recorded in your browser for this session only — not uploaded or saved anywhere, and gone once you refresh or close this page.")
+            for i, qa in enumerate(qa_pairs, 1):
+                if not qa["clip"]:
+                    continue
+                q_preview = qa["question"][:90] + ("…" if len(qa["question"]) > 90 else "")
+                with st.expander(f"Question {i}: {q_preview}", expanded=False):
+                    st.markdown(f"**Question:** {qa['question']}")
+                    st.markdown(f"**Your answer:** {qa['answer']}")
+                    st.markdown(
+                        f'<video src="{qa["clip"]}" controls style="width:100%;max-width:380px;'
+                        f'border-radius:10px;margin-top:8px;display:block;"></video>',
+                        unsafe_allow_html=True,
+                    )
+
         if st.button("🔄 Start New Interview", type="primary", width='stretch'):
-            for k in ("iv_mode","iv_history","iv_report","iv_busy","iv_started","iv_type","iv_topic","iv_chat","iv_client"):
+            for k in ("iv_mode","iv_history","iv_report","iv_busy","iv_started","iv_type","iv_topic","iv_chat","iv_client","iv_video_clip_box"):
                 st.session_state.pop(k, None)
             st.rerun()
 
