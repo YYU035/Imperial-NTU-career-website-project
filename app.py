@@ -4,6 +4,16 @@ Uses backend_api.py (EEECareerPlatform) for all data and ML operations.
 """
 
 import os
+import csv
+import io
+import hmac
+import json
+import sqlite3
+import uuid
+from datetime import datetime, timezone
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 from dotenv import load_dotenv
 load_dotenv()
 # Suppress macOS/PyTorch threading mutex warnings from abseil C++ runtime
@@ -28,6 +38,205 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# ========== Visitor registration & admin export ==========
+VISITOR_DB_PATH = os.getenv(
+    "VISITOR_DB_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "Data", "visitor_registry.sqlite3"),
+)
+STUDY_YEARS = ["Year 1", "Year 2", "Year 3", "Year 4", "Postgraduate", "Staff / Other"]
+
+
+def _secret(name, default=""):
+    try:
+        return str(st.secrets.get(name, default)).strip()
+    except Exception:
+        return str(os.getenv(name, default)).strip()
+
+
+def _supabase_config():
+    url = _secret("SUPABASE_URL").rstrip("/")
+    key = _secret("SUPABASE_SECRET_KEY") or _secret("SUPABASE_SERVICE_ROLE_KEY")
+    return url, key
+
+
+def _using_supabase():
+    return all(_supabase_config())
+
+
+def _supabase_request(method, query="", payload=None):
+    """Call Supabase Data REST API using a server-only secret."""
+    url, key = _supabase_config()
+    if not url or not key:
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SECRET_KEY are not configured.")
+    endpoint = f"{url}/rest/v1/visitor_registrations"
+    if query:
+        endpoint += f"?{query}"
+    headers = {"apikey": key, "Content-Type": "application/json"}
+    if not key.startswith("sb_secret_"):
+        headers["Authorization"] = f"Bearer {key}"
+    if method == "POST":
+        headers["Prefer"] = "resolution=ignore-duplicates,return=minimal"
+    body = json.dumps(payload).encode("utf-8") if payload is not None else None
+    try:
+        with urlopen(Request(endpoint, data=body, headers=headers, method=method), timeout=15) as response:
+            content = response.read()
+            return json.loads(content.decode("utf-8")) if content else None
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Supabase request failed ({exc.code}): {detail}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"Could not connect to Supabase: {exc.reason}") from exc
+
+
+def _visitor_db():
+    """Local development fallback; production should configure Supabase."""
+    os.makedirs(os.path.dirname(VISITOR_DB_PATH) or ".", exist_ok=True)
+    connection = sqlite3.connect(VISITOR_DB_PATH, timeout=10)
+    connection.execute("PRAGMA journal_mode=WAL")
+    connection.execute("PRAGMA busy_timeout=10000")
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS visitor_registrations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            study_year TEXT NOT NULL,
+            registered_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.commit()
+    return connection
+
+
+def _save_visitor(name, study_year):
+    session_id = st.session_state.setdefault("visitor_session_id", str(uuid.uuid4()))
+    registered_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    if _using_supabase():
+        _supabase_request("POST", payload={
+            "session_id": session_id,
+            "name": name.strip(),
+            "study_year": study_year,
+            "registered_at": registered_at,
+        })
+        return
+    with _visitor_db() as connection:
+        connection.execute(
+            """INSERT OR IGNORE INTO visitor_registrations
+               (session_id, name, study_year, registered_at) VALUES (?, ?, ?, ?)""",
+            (session_id, name.strip(), study_year, registered_at),
+        )
+
+
+def _visitor_rows():
+    if _using_supabase():
+        query = urlencode({
+            "select": "id,name,study_year,registered_at",
+            "order": "registered_at.desc",
+        })
+        records = _supabase_request("GET", query=query) or []
+        return [
+            (record["id"], record["name"], record["study_year"], record["registered_at"])
+            for record in records
+        ]
+    with _visitor_db() as connection:
+        return connection.execute(
+            """SELECT id, name, study_year, registered_at
+               FROM visitor_registrations ORDER BY registered_at DESC"""
+        ).fetchall()
+
+
+def _visitor_csv(rows):
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(["Record ID", "Name", "Year of study", "Registered at (UTC)"])
+    writer.writerows(rows)
+    return output.getvalue().encode("utf-8-sig")
+
+
+def _show_admin_page():
+    st.title("🔐 Visitor Records")
+    st.caption("Administrator access only")
+    expected_password = _secret("ADMIN_PASSWORD")
+    if not expected_password:
+        st.error("ADMIN_PASSWORD is not configured in Streamlit Secrets.")
+        st.stop()
+
+    if not st.session_state.get("admin_authenticated"):
+        with st.form("admin_login"):
+            password = st.text_input("Admin password", type="password")
+            submitted = st.form_submit_button("Sign in", type="primary")
+        if submitted:
+            if hmac.compare_digest(password, expected_password):
+                st.session_state.admin_authenticated = True
+                st.rerun()
+            else:
+                st.error("Incorrect password.")
+        st.stop()
+
+    try:
+        rows = _visitor_rows()
+    except RuntimeError as exc:
+        st.error(f"Visitor records could not be loaded. Check the Supabase configuration. ({exc})")
+        st.stop()
+    st.success(f"Storage: {'Supabase cloud database' if _using_supabase() else 'local SQLite (development only)'}")
+    metric_col, action_col = st.columns([1, 2])
+    metric_col.metric("Total registrations", len(rows))
+    with action_col:
+        st.download_button(
+            "⬇️ Export all records (CSV)",
+            data=_visitor_csv(rows),
+            file_name=f"visitor_records_{datetime.now().date().isoformat()}.csv",
+            mime="text/csv",
+            width="stretch",
+        )
+    if rows:
+        import pandas as pd
+        table = pd.DataFrame(rows, columns=["Record ID", "Name", "Year of study", "Registered at (UTC)"])
+        st.dataframe(table, use_container_width=True, hide_index=True)
+    else:
+        st.info("No visitor registrations yet.")
+    if st.button("Sign out"):
+        st.session_state.admin_authenticated = False
+        st.rerun()
+    if st.button("← Back to student platform"):
+        st.query_params.clear()
+        st.rerun()
+    st.stop()
+
+
+if st.query_params.get("admin") == "1":
+    _show_admin_page()
+
+
+if not st.session_state.get("visitor_registered"):
+    st.title("🎓 Welcome to NTU EEE Career Pathways")
+    st.write("Please register before entering the platform. This helps the research team understand who has used it.")
+    with st.form("visitor_registration", clear_on_submit=False):
+        visitor_name = st.text_input("Name", max_chars=100, placeholder="Enter your name")
+        visitor_year = st.selectbox("Year of study", STUDY_YEARS, index=None, placeholder="Select your year")
+        consent = st.checkbox("I agree that my name, year of study, and registration time may be stored for research administration.")
+        register = st.form_submit_button("Enter platform", type="primary", width="stretch")
+    if register:
+        cleaned_name = " ".join(visitor_name.split())
+        if len(cleaned_name) < 2:
+            st.error("Please enter your name.")
+        elif not visitor_year:
+            st.error("Please select your year of study.")
+        elif not consent:
+            st.error("Please confirm the data collection notice before continuing.")
+        else:
+            try:
+                _save_visitor(cleaned_name, visitor_year)
+            except RuntimeError as exc:
+                st.error(f"Registration could not be saved. Please try again later. ({exc})")
+            else:
+                st.session_state.visitor_registered = True
+                st.session_state.visitor_name = cleaned_name
+                st.rerun()
+    st.caption("Administrators: add `?admin=1` to the end of this page's URL.")
+    st.stop()
 
 # ========== Premium CSS ==========
 st.markdown("""
