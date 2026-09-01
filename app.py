@@ -73,6 +73,8 @@ def _supabase_request(method, query="", payload=None):
     if query:
         endpoint += f"?{query}"
     headers = {"apikey": key, "Content-Type": "application/json"}
+    # Legacy service_role keys are JWTs and also use the Bearer header. New
+    # sb_secret keys authenticate through apikey and must remain server-side.
     if not key.startswith("sb_secret_"):
         headers["Authorization"] = f"Bearer {key}"
     if method == "POST":

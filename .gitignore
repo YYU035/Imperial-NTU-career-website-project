@@ -1,7 +1,9 @@
+# Local secrets and runtime visitor data
 .env
 .streamlit/secrets.toml
 Data/visitor_registry.sqlite3
 Data/visitor_registry.sqlite3-shm
 Data/visitor_registry.sqlite3-wal
+
 __pycache__/
 *.py[cod]

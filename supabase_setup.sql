@@ -10,6 +10,9 @@ create table if not exists public.visitor_registrations (
 );
 
 alter table public.visitor_registrations enable row level security;
+
+-- Students never receive a Supabase key. Only the Streamlit server secret can
+-- insert/read records, and the admin page adds a separate password check.
 revoke all on table public.visitor_registrations from anon, authenticated;
 grant select, insert on table public.visitor_registrations to service_role;
 grant usage, select on sequence public.visitor_registrations_id_seq to service_role;
