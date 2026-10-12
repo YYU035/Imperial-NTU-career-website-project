@@ -49,7 +49,7 @@ STUDY_YEARS = ["Year 1", "Year 2", "Year 3", "Year 4", "Postgraduate", "Staff / 
 
 def _secret(name, default=""):
     try:
-        return str(st.secrets.get(name, default)).strip()
+        return str(st.secrets.get(name, os.getenv(name, default))).strip()
     except Exception:
         return str(os.getenv(name, default)).strip()
 
@@ -616,7 +616,7 @@ When asked about specific roles or skills, give concrete, practical advice for E
 def get_bot_response(user_input: str) -> str:
     import concurrent.futures
     from groq import Groq
-    api_key = os.environ.get("GROQ_API_KEY", "")
+    api_key = _secret("GROQ_API_KEY")
     if not api_key:
         return "Chatbot unavailable — GROQ_API_KEY not set in .env file."
 
@@ -631,7 +631,7 @@ def get_bot_response(user_input: str) -> str:
             client = Groq(api_key=api_key)
             with concurrent.futures.ThreadPoolExecutor() as ex:
                 future = ex.submit(client.chat.completions.create,
-                                   model="llama-3.3-70b-versatile",
+                                   model=_secret("GROQ_MODEL", "openai/gpt-oss-120b") or "openai/gpt-oss-120b",
                                    messages=messages, max_tokens=1024)
                 response = future.result(timeout=25)
             return response.choices[0].message.content
@@ -651,7 +651,7 @@ def get_bot_response(user_input: str) -> str:
 def _get_cv_ai_feedback(cv_text: str, skills: list, jobs: list) -> str:
     import concurrent.futures
     from groq import Groq
-    api_key = os.environ.get("GROQ_API_KEY", "")
+    api_key = _secret("GROQ_API_KEY")
     top_jobs = ", ".join(j.get("position", "") for j in jobs[:3]) or "EEE engineering roles"
     skill_list = ", ".join(skills[:20]) or "none detected"
     course_list = _ntu_course_list_text()
@@ -685,7 +685,7 @@ Be specific — reference actual content from the CV. Keep total response under 
             client = Groq(api_key=api_key)
             with concurrent.futures.ThreadPoolExecutor() as ex:
                 future = ex.submit(client.chat.completions.create,
-                                   model="llama-3.3-70b-versatile",
+                                   model=_secret("GROQ_MODEL", "openai/gpt-oss-120b") or "openai/gpt-oss-120b",
                                    messages=[{"role": "user", "content": prompt}],
                                    max_tokens=1200)
                 response = future.result(timeout=30)
@@ -776,7 +776,10 @@ def _iv_extract_qa_pairs(history: list) -> list:
 def _iv_call(message: str) -> str:
     import concurrent.futures
     from groq import Groq
-    api_key = os.environ.get("GROQ_API_KEY", "")
+    api_key = _secret("GROQ_API_KEY")
+
+    if not api_key:
+        return "⚠️ Interview unavailable: configure GROQ_API_KEY in .env or Streamlit secrets."
 
     messages = [{"role": "system", "content": _get_iv_system_prompt()}]
     for msg in st.session_state.get("iv_history", []):
@@ -789,7 +792,7 @@ def _iv_call(message: str) -> str:
             client = Groq(api_key=api_key)
             with concurrent.futures.ThreadPoolExecutor() as ex:
                 future = ex.submit(client.chat.completions.create,
-                                   model="llama-3.3-70b-versatile",
+                                   model=_secret("GROQ_MODEL", "openai/gpt-oss-120b") or "openai/gpt-oss-120b",
                                    messages=messages, max_tokens=1024)
                 response = future.result(timeout=25)
             return response.choices[0].message.content
@@ -1604,6 +1607,11 @@ with tab3:
         if not st.session_state.get("iv_started"):
             with st.spinner("Interviewer is preparing…"):
                 first_q = _iv_call("Begin the interview.")
+            if not first_q or first_q.startswith("⚠️"):
+                st.error(first_q or "The interviewer returned an empty response.")
+                if st.button("Retry starting interview"):
+                    st.rerun()
+                st.stop()
             st.session_state.iv_history.append({
                 "role": "interviewer",
                 "text": first_q or "Hello! I'm your interviewer. Let's begin — tell me about yourself."
@@ -1657,10 +1665,14 @@ with tab3:
                 else:
                     st.session_state.iv_busy = True
                     clip = (video_clip or "").strip() or None
-                    st.session_state.iv_history.append({"role": "student", "text": answer.strip(), "clip": clip})
-                    st.session_state["_iv_clear_clip"] = True  # don't let a stale clip reattach next answer
                     with st.spinner("Interviewer is responding…"):
                         reply = _iv_call(answer.strip())
+                    if not reply or reply.startswith("⚠️"):
+                        st.session_state.iv_busy = False
+                        st.error(reply or "The interviewer returned an empty response. Please submit again.")
+                        st.stop()
+                    st.session_state.iv_history.append({"role": "student", "text": answer.strip(), "clip": clip})
+                    st.session_state["_iv_clear_clip"] = True  # don't let a stale clip reattach next answer
                     st.session_state.iv_history.append({"role": "interviewer", "text": reply})
                     st.session_state.iv_busy = False
                     if "[INTERVIEW_COMPLETE]" in reply:
@@ -1672,6 +1684,9 @@ with tab3:
                                 "Base this strictly on the transcript above — do not invent companies, "
                                 "projects, or claims the student did not state."
                             )
+                        if not report or report.startswith("⚠️"):
+                            st.error(report or "The report was empty. Use End & Get Report to retry.")
+                            st.stop()
                         st.session_state.iv_report = report
                         _iv_log_result(report)
                         st.session_state.iv_mode = "done"
@@ -1688,6 +1703,10 @@ with tab3:
                         "transcript above — do not invent companies, projects, or claims the student "
                         "did not state."
                     )
+                if not report or report.startswith("⚠️"):
+                    st.session_state.iv_busy = False
+                    st.error(report or "The report was empty. Please try again.")
+                    st.stop()
                 st.session_state.iv_report = report
                 _iv_log_result(report)
                 st.session_state.iv_busy = False
